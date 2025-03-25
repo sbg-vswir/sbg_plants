@@ -1,0 +1,7 @@
+sphinx
+nbsphinx
+sphinx_rtd_theme
+ipython_genutils
+ipython
+ipywidgets
+myst-parser

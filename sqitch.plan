@@ -3,3 +3,4 @@
 %uri=https://github.com/EvanDLang/sbg_plants
 
 database_init 2024-11-08T18:08:51Z ,,, <edlang@GSLWL2022100165> # Initialize schema with postgis extension and create sbgplants_admin group
+sbg_plants_v1 2024-11-08T20:43:11Z ,,, <edlang@GSLWL2022100165> # Version 1 of the SBG PLANTS schema
