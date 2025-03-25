@@ -8,3 +8,5 @@ Welcome to SBG Plants's documentation!
 
 .. toctree::
    :maxdepth: 2
+
+   pages/admin_connect
