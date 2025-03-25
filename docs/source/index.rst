@@ -10,3 +10,4 @@ Welcome to SBG Plants's documentation!
    :maxdepth: 2
 
    pages/admin_connect
+   pages/sqitch
