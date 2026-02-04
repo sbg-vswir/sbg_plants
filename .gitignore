@@ -6,3 +6,4 @@ terraform.tfstate.backup
 network_outputs.json
 database_outputs.json
 .env
+__pycache__
