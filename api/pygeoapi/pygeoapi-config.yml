@@ -1,0 +1,180 @@
+server:
+    bind:
+        host: 0.0.0.0
+        port: 80
+    url: /
+    mimetype: application/json; charset=UTF-8
+    encoding: utf-8
+    language: en-US
+    cors: false
+    pretty_print: true
+    limits:
+        default_items: 20
+        max_items: 2000
+    # templates: /path/to/templates
+    map:
+        url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+        attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+
+logging:
+    level: ERROR
+    #logfile: /tmp/pygeoapi.log
+
+metadata:
+    identification:
+        title: pygeoapi default instance
+        description: pygeoapi provides an API to geospatial data
+        keywords:
+            - geospatial
+            - data
+            - api
+        keywords_type: theme
+        terms_of_service: https://creativecommons.org/licenses/by/4.0/
+        url: http://example.org
+    license:
+        name: CC-BY 4.0 license
+        url: https://creativecommons.org/licenses/by/4.0/
+    provider:
+        name: Organization Name
+        url: https://pygeoapi.io
+    contact:
+        name: Lastname, Firstname
+        position: Position Title
+        address: Mailing Address
+        city: City
+        stateorprovince: Administrative Area
+        postalcode: Zip or Postal Code
+        country: Country
+        phone: +xx-xxx-xxx-xxxx
+        fax: +xx-xxx-xxx-xxxx
+        email: you@example.org
+        url: Contact URL
+        hours: Hours of Service
+        instructions: During hours of service.  Off on weekends.
+        role: pointOfContact
+
+resources:
+    lakes:
+        type: collection
+        title: Large Lakes
+        description: lakes of the world, public domain
+        keywords:
+            - lakes
+        links:
+            - type: text/html
+              rel: canonical
+              title: information
+              href: http://www.naturalearthdata.com/
+              hreflang: en-US
+        extents:
+            spatial:
+                bbox: [-180,-90,180,90]
+                crs: http://www.opengis.net/def/crs/OGC/1.3/CRS84
+            temporal:
+                begin: 2011-11-11
+                end: null  # or empty
+                trs: http://www.opengis.net/def/uom/ISO-8601/0/Gregorian
+        providers:
+            - type: feature
+              name: GeoJSON
+              data: lakes.geojson
+              id_field: id
+    radiance:
+        type: collection
+        title: Radiance 
+        description: Radiance
+        keywords:
+            - Radiance
+        extents:
+            spatial:
+                bbox: [-180, -90, 180, 90]
+                crs: http://www.opengis.net/def/crs/OGC/1.3/CRS84
+            temporal:
+                begin: null
+                end: null  # or empty (either means open ended)
+        formats:
+            - name: GeoJSON
+              mime_type: application/geo+json
+        providers:
+          - type: feature
+            name: PostgreSQL
+            data:
+                host: ${DB_HOST}
+                dbname: ${DB_NAME}
+                user: ${DB_USER}
+                password: ${DB_PASS}
+                search_path: [vswir_plants]
+            options:
+                # Maximum time to wait while connecting, in seconds.
+                connect_timeout: 10
+                # Number of *milliseconds* that transmitted data may remain
+                # unacknowledged before a connection is forcibly closed.
+                tcp_user_timeout: 10000
+                # Whether client-side TCP keepalives are used. 1 = use keepalives,
+                # 0 = don't use keepalives.
+                keepalives: 1
+                # Number of seconds of inactivity after which TCP should send a
+                # keepalive message to the server.
+                keepalives_idle: 5
+                # Number of TCP keepalives that can be lost before the client's
+                # connection to the server is considered dead.
+                keepalives_count: 5
+                # Number of seconds after which a TCP keepalive message that is not
+                # acknowledged by the server should be retransmitted.
+                keepalives_interval: 1
+            id_field: id
+            table: plot_pixels_mv
+            geom_field: geom        
+            crs:
+              - http://www.opengis.net/def/crs/EPSG/0/4326
+            storage_crs: http://www.opengis.net/def/crs/EPSG/0/4326
+    leaf_traits:
+        type: collection
+        title: Leaf Traits 
+        description: Leaf Traits
+        keywords:
+            - Leaf Traits
+        extents:
+            spatial:
+                bbox: [-180, -90, 180, 90]
+                crs: http://www.opengis.net/def/crs/OGC/1.3/CRS84
+            temporal:
+                begin: null
+                end: null  # or empty (either means open ended)
+        formats:
+            - name: GeoJSON
+              mime_type: application/geo+json
+        providers:
+          - type: feature
+            name: PostgreSQL
+            data:
+                host: ${DB_HOST}
+                dbname: ${DB_NAME}
+                user: ${DB_USER}
+                password: ${DB_PASS}
+                search_path: [vswir_plants]
+            options:
+                # Maximum time to wait while connecting, in seconds.
+                connect_timeout: 10
+                # Number of *milliseconds* that transmitted data may remain
+                # unacknowledged before a connection is forcibly closed.
+                tcp_user_timeout: 10000
+                # Whether client-side TCP keepalives are used. 1 = use keepalives,
+                # 0 = don't use keepalives.
+                keepalives: 1
+                # Number of seconds of inactivity after which TCP should send a
+                # keepalive message to the server.
+                keepalives_idle: 5
+                # Number of TCP keepalives that can be lost before the client's
+                # connection to the server is considered dead.
+                keepalives_count: 5
+                # Number of seconds after which a TCP keepalive message that is not
+                # acknowledged by the server should be retransmitted.
+                keepalives_interval: 1
+            id_field: id
+            table: insitu_sample_trait_view
+            geom_field: geom        
+            crs:
+              - http://www.opengis.net/def/crs/EPSG/0/4326
+            storage_crs: http://www.opengis.net/def/crs/EPSG/0/4326
+  

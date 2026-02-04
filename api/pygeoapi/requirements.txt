@@ -1,0 +1,13 @@
+pygeoapi
+aws-wsgi
+pandas
+scipy
+xarray
+rasterio
+fiona
+pyproj
+netCDF4
+dask
+tinydb
+elasticsearch
+pymongo
