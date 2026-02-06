@@ -43,6 +43,10 @@ variable "ecr_image_url" {
     type  = string
 }
 
+variable "worker_lambda_url" {
+    type  = string
+}
+
 variable "db_user" {
     type  = string
 }

@@ -2,26 +2,26 @@ import logging
 import pandas as pd
 import geopandas as gpd
 from app.db import get_connection
-from app.filter import build_query
+from app.filter import build_where_clause
 
+logger = logging.getLogger("lambda_handler")
 
-# --- Module-level logger setup ---
-logger = logging.getLogger("query_view")
-handler = logging.StreamHandler()
-formatter = logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.propagate = False  # avoid duplicate logging
-
-ALLOWED_VIEWS = ["plot_pixels_mv", "insitu_sample_trait_mv"]
+ALLOWED_VIEWS = ["plot_pixels_mv", "insitu_sample_trait_mv", "pixel_spectra_mv"]
 
 VIEW_MAP = {
     "plot_pixels_mv": True,
-    "insitu_sample_trait_mv": True
+    "insitu_sample_trait_mv": True,
+    "pixel_spectra_mv": False
+}
+
+ASYNC_VIEWS = {
+    "plot_pixels_mv": False,
+    "insitu_sample_trait_mv": False,
+    "pixel_spectra_mv": True
 }
 
 
-def query_view(view_name: str, limit: int = None, offset: int = 0,  filters: dict = None, debug: bool = False):
+def build_query(view_name: str, select_statement:str,  limit: int = None, offset: int = 0,  filters: dict = None):
     """
     Query a whitelisted view and return a pandas or geopandas DataFrame.
     Automatically returns GeoDataFrame if 'geom' column is present.
@@ -36,22 +36,17 @@ def query_view(view_name: str, limit: int = None, offset: int = 0,  filters: dic
     Returns:
     - pd.DataFrame or gpd.GeoDataFrame
     """
-    # --- Set logger level based on debug flag ---
-    if debug:
-        logger.setLevel(logging.DEBUG)
-    else:
-        logger.setLevel(logging.WARNING)
 
     if view_name not in ALLOWED_VIEWS:
         raise ValueError(f"View '{view_name}' is not allowed.")
 
     # --- Build SQL query ---
-    sql = f'SELECT * FROM "{view_name}"'
+    sql = f'SELECT {select_statement} FROM "{view_name}"'
     params = []
 
     # --- WHERE clause ---
     if filters:
-        where_clause, where_params = build_query(view_name, filters, debug=False)
+        where_clause, where_params = build_where_clause(view_name, filters)
         sql += where_clause
         # Flatten tuple/list for GeoPandas / pandas
         if isinstance(where_params, (tuple, list)):
@@ -68,7 +63,14 @@ def query_view(view_name: str, limit: int = None, offset: int = 0,  filters: dic
     if offset:
         sql += " OFFSET %s"
         params.append(int(offset))
+    
+    logger.debug("Built query for view: %s", view_name)
+    logger.debug("SQL: %s", sql)
+    logger.debug("Params: %s", params)
+    
+    return sql, params
 
+def execute_query(view_name: str, sql: str, params: list, debug: bool = False):
     # --- Conditional debug logging ---
     logger.debug("Executing query on view: %s", view_name)
     logger.debug("SQL: %s", sql)

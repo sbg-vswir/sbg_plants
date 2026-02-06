@@ -34,7 +34,9 @@ module "pygeoapi" {
   public_subnet_ids = module.network.subnet_public_ids
   name               = var.name
   ecr_image_url      = var.ecr_image_url
+  worker_lambda_url   = var.worker_lambda_url
 
+  route_table_ids = module.network.vpc_route_table_ids
   db_port = var.db_port
   db_name = var.db_name
   db_user = var.db_user

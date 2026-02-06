@@ -19,35 +19,22 @@ from app.filter_utils import (
     _build_polygon_clause
 )
 
-# Module-level logger
-logger = logging.getLogger("filters")
-logger.setLevel(logging.WARNING)  # default to WARNING in production
-handler = logging.StreamHandler()
-formatter = logging.Formatter(
-    "[%(asctime)s] %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-)
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.propagate = False
+import logging
 
+logger = logging.getLogger("lambda_handler")
 
-def build_query(view_name, filters, debug=False):
+def build_where_clause(view_name, filters):
     """
     Build a SQL WHERE clause and parameters for any view using validated filters.
     
     Parameters:
     - view_name: str, name of the view (must be in VIEW_FIELD_CONFIG)
     - filters: dict, column -> value mapping
-    - debug: bool, if True, logs generated SQL and params
     
     Returns:
         sql_where (str): the WHERE clause (including "WHERE"), or empty string if no filters
         params (tuple): tuple of parameters ready for psycopg2 / SQLAlchemy / GeoPandas
     """
-    if debug:
-        logger.setLevel(logging.DEBUG)
-    else:
-        logger.setLevel(logging.WARNING)
     
     # Get view configuration
     if view_name not in VIEW_FIELD_CONFIG:
@@ -99,11 +86,9 @@ def build_query(view_name, filters, debug=False):
     
     # Construct final WHERE clause
     sql_where = " WHERE " + " AND ".join(clauses) if clauses else ""
-    
-    # Conditional debug logging
-    if debug:
-        logger.debug("Generated SQL WHERE clause: %s", sql_where)
-        logger.debug("Generated params: %s", params)
+   
+    logger.debug("Generated SQL WHERE clause: %s", sql_where)
+    logger.debug("Generated params: %s", params)
     
     return sql_where, tuple(params)
 
@@ -119,7 +104,7 @@ if __name__ == "__main__":
         "start_date": "2018-01-01",
         "end_date": "2018-12-31"
     }
-    sql, params = build_query("plot_pixels_mv", filters1, debug=True)
+    sql, params = build_where_clause("plot_pixels_mv", filters1)
     print(f"\nSQL: {sql}")
     print(f"Params: {params}")
     
@@ -131,6 +116,6 @@ if __name__ == "__main__":
         "taxa": ["Salix planifolia"],
         "start_date": "2018-06-01"
     }
-    sql, params = build_query("insitu_sample_trait_mv", filters2, debug=True)
+    sql, params = build_where_clause("insitu_sample_trait_mv", filters2)
     print(f"\nSQL: {sql}")
     print(f"Params: {params}")

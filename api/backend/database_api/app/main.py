@@ -2,22 +2,20 @@ import json
 import io
 import base64
 import logging
-from app.query import ALLOWED_VIEWS, query_view
+
 import geopandas as gpd
 import shapely.wkt
 import shapely.geometry
 
-# --- Configure module-level logger ---
+from app.query import ALLOWED_VIEWS, ASYNC_VIEWS, execute_query, build_query
+from app.select_config import SELECTABLE_COLUMNS
+from app.sqs import send_sqs
+
+
 logger = logging.getLogger("lambda_handler")
 logger.setLevel(logging.WARNING)
-handler = logging.StreamHandler()
-formatter = logging.Formatter("[%(asctime)s] %(levelname)s - %(message)s", "%Y-%m-%d %H:%M:%S")
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.propagate = False
 
-
-def handler(event, context):
+def lambda_handler(event, context):
     path_params = event.get("pathParameters") or {}
     query_params = event.get("queryStringParameters") or {}
 
@@ -51,6 +49,28 @@ def handler(event, context):
         logger.debug("Invalid offset: %s", offset)
         return {"statusCode": 400, "body": json.dumps({"error": "Invalid offset"})}
 
+    select = query_params.get("select")
+
+    if select is None:
+        select_statement = "*"
+    else:
+        try:
+            select = json.loads(select)
+        except json.JSONDecodeError:
+            select = [select]  # wrap single column in list
+
+        # Validate columns using set operation
+        invalid_cols = set(select) - set(SELECTABLE_COLUMNS[view_name])
+        if invalid_cols:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": f"Invalid columns: {', '.join(invalid_cols)}"})
+            }
+            
+        select_statement = ", ".join(select)
+
+    logger.debug("Selecting columns: %s", select_statement)
+    
     filters_str = query_params.get("filters")
     try:
         filters = json.loads(filters_str) if filters_str else None
@@ -58,14 +78,34 @@ def handler(event, context):
     except json.JSONDecodeError:
         logger.debug("Invalid JSON for filters: %s", filters_str)
         return {"statusCode": 400, "body": json.dumps({"error": "Invalid JSON for filters"})}
-
+    
     try:
-        df = query_view(view_name=view_name, limit=limit, offset=offset, filters=filters, debug=debug)
-        logger.debug("Query returned %d rows", len(df))
+        sql, params = build_query(view_name=view_name, select_statement=select_statement, limit=limit, offset=offset, filters=filters)
     except Exception as e:
         logger.exception("Database error")
         return {"statusCode": 500, "body": json.dumps({"error": f"Database error: {str(e)}"})}
-
+    
+    if ASYNC_VIEWS[view_name]:
+        try:
+            job_id = send_sqs(sql, params, debug)
+        except Exception as e:
+            logger.exception("sqs error")
+            return {"statusCode": 500, "body": json.dumps({"error": f"Database error: {str(e)}"})}
+        
+        logger.debug(f"Submitted job: {job_id} to worker")
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"job_id": job_id}),
+            "headers": {"Content-Type": "application/json"}
+        }
+    else: 
+        try:
+            df = execute_query(view_name=view_name, sql=sql, params=params, debug=debug)
+            logger.debug("Query returned %d rows", len(df))
+        except Exception as e:
+            logger.exception("Database error")
+            return {"statusCode": 500, "body": json.dumps({"error": f"Database error: {str(e)}"})}
+        
     if df.empty:
         logger.debug("Query returned no data")
         return {"statusCode": 404, "body": json.dumps({"error": "No data found"})}

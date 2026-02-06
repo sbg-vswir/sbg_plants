@@ -1,4 +1,3 @@
-
 import dash
 from dash import Dash, html, dcc, dash_table, Input, Output, State
 import dash_leaflet as dl
@@ -6,12 +5,11 @@ import pandas as pd
 import io
 import requests
 import base64
-import pyarrow.parquet as pq
+import json
 import geopandas as gpd
-import base64, json
 from shapely import wkt, geometry
 import numpy as np
-from view_config import VIEW_CONFIGS
+from view_config import VIEW_CONFIGS, SELECT_CONFIGS
 
 app = Dash(__name__, suppress_callback_exceptions=True)
 
@@ -80,7 +78,10 @@ def fetch_parquet(view, filters, geojson_content=None, limit=100, offset=0):
     """
     Fetch Parquet from API using filters, optional GeoJSON, with limit & offset.
     """
-    params = {"view": view, "format": "parquet", "limit": limit, "offset": offset, "debug": True}
+    
+    select = SELECT_CONFIGS[view]
+    
+    params = {"view": view, "format": "parquet", "select": json.dumps(select), "limit": limit, "offset": offset, "debug": True}
 
     valid_filters = {}
     for k, v in filters.items():
@@ -93,19 +94,19 @@ def fetch_parquet(view, filters, geojson_content=None, limit=100, offset=0):
             
     params['filters'] = json.dumps(valid_filters)
     
-    if geojson_content:
-        geojson_str = geojson_content.split(",")[1]
-        print(geojson_str)
-        # geojson_bytes = base64.b64decode(geojson_str)
-        # files = {"geojson": ("upload.geojson", geojson_bytes, "application/json")}
-        # resp = requests.post(API_URL.format(view), params=params, files=files)
-    else:
-        resp = requests.get(API_URL.format(view), params=params)
+    # if geojson_content:
+    #     geojson_str = geojson_content.split(",")[1]
+    #     print(geojson_str)
+    #     # geojson_bytes = base64.b64decode(geojson_str)
+    #     # files = {"geojson": ("upload.geojson", geojson_bytes, "application/json")}
+    #     # resp = requests.post(API_URL.format(view), params=params, files=files)
+    # else:
+    resp = requests.get(API_URL.format(view), params=params)
 
     print(params)
     resp.raise_for_status()
     df = gpd.read_parquet(io.BytesIO(resp.content))
-    # print(df)
+    
     return df
 
 def summarize_value(v, n=2, *args, **kwargs):

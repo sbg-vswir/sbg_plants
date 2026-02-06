@@ -10,7 +10,7 @@ from app.filter_config import (
 )
 
 # ============================================================================
-# SHARED QUERY BUILDING FUNCTIONS
+#  QUERY BUILDING FUNCTIONS
 # ============================================================================
 
 def _validate_polygon(polygon):

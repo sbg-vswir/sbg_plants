@@ -30,7 +30,8 @@ STRING_FIELDS = {
 NUMERIC_FIELDS = {
     "value",
     "error",
-    "sample_fc_percent"
+    "sample_fc_percent",
+    "pixel_id"
 }
 
 # Boolean fields
@@ -59,8 +60,9 @@ VIEW_FIELD_CONFIG = {
             "campaign_name",
             "sensor_name",
             "granule_id",
+            "granule_date"
         },
-        "date_column": "granule_date"  # Column to use for start_date/end_date filtering
+        "date_column": "granule_date" 
     },
     "insitu_sample_trait_mv": {
         "allowed_fields": {
@@ -86,8 +88,19 @@ VIEW_FIELD_CONFIG = {
             "plot_veg_type",
             "subplot_cover_method",
             "floristic_survey",
-            "plot_method"
+            "plot_method",
+            "collection_date"
         },
         "date_column": "collection_date"
+    },
+    "pixel_spectra_mv": {
+        "allowed_fields": {
+            "plot_name",
+            "granule_id",
+            "granule_date",
+            "pixel_id",
+            'granule_date'
+        },
+        "date_column": "granule_date" 
     }
 }

@@ -6,6 +6,10 @@ variable "public_subnet_ids" {
     type  = list(string)
 }
 
+variable "route_table_ids" {
+    type  = list(string)
+}
+
 variable "name" {
     type  = string
 }
@@ -36,5 +40,9 @@ variable "db_port" {
 }
 
 variable "region" {
+    type  = string
+}
+
+variable "worker_lambda_url" {
     type  = string
 }
