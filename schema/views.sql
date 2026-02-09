@@ -1,14 +1,12 @@
 CREATE MATERIALIZED VIEW vswir_plants.plot_pixels_mv AS
 SELECT
-    ROW_NUMBER() OVER () AS id, 
     pri.plot_id,
     pl.plot_name,
     g.campaign_name,
     g.sensor_name,
     pri.granule_id,
-    to_char(to_date(substring(pri.granule_id from '\d{8}'), 'YYYYMMDD'), 'YYYY-MM-DD') AS granule_date,
-    -- aggregate pixel_ids for this plot+granule
-    jsonb_agg(p.pixel_id ORDER BY p.pixel_id) AS pixel_ids,
+    to_date(substring(pri.granule_id from '\d{8}'), 'YYYYMMDD') AS granule_date,
+    jsonb_agg(p.pixel_id ORDER BY p.pixel_id) AS pixel_ids,   -- aggregate pixel_ids for this plot+granule
     ps.geom
 FROM plot_raster_intersect pri
 JOIN plot pl ON pl.plot_id = pri.plot_id
@@ -24,20 +22,12 @@ GROUP BY
     granule_date,
     geom;
 
-
--- GIST index for geometry (spatial queries)
 CREATE INDEX idx_plot_pixels_geom ON vswir_plants.plot_pixels_mv USING GIST (geom);
--- B-tree index on plot_id (or plot_name) for filtering by plot
-CREATE INDEX idx_plot_pixels_plot ON vswir_plants.plot_pixels_mv (plot_name);
--- B-tree index on granule_date for filtering by date
 CREATE INDEX idx_plot_pixels_date ON vswir_plants.plot_pixels_mv (granule_date);
--- Optional: combined index if you often filter by plot + granule_date together
-CREATE INDEX idx_plot_pixels_plot_date ON vswir_plants.plot_pixels_mv (plot_name, granule_date);
 
 
-CREATE MATERIALIZED VIEW vswir_plants.insitu_sample_trait_mv AS
+CREATE VIEW vswir_plants.leaf_traits_view AS
 SELECT
-ROW_NUMBER() OVER () AS id,
 p.campaign_name,
 p.site_id,
 p.plot_name,
@@ -68,36 +58,13 @@ JOIN plot p ON p.plot_id = ipe.plot_id
 JOIN plot_raster_intersect pri ON pri.plot_id = p.plot_id
 JOIN plot_shape ps ON ps.plot_shape_id = pri.plot_shape_id;
 
-CREATE INDEX idx_leaf_traits_geom ON vswir_plants.insitu_sample_trait_mv USING GIST (geom);
-
-
-CREATE MATERIALIZED VIEW pixel_spectra_mv AS
-SELECT
-    pp.plot_name,
-    pp.granule_id,
-    pp.granule_date,
-    pid.pixel_id::integer AS pixel_id,
-    es.radiance
-FROM vswir_plants.plot_pixels_mv pp
-
-JOIN LATERAL jsonb_array_elements_text(pp.pixel_ids) AS pid(pixel_id) ON TRUE
-JOIN extracted_spectra es
-    ON es.pixel_id = pid.pixel_id::integer;
-
-CREATE INDEX pixel_spectra_mv_granule_id_idx
-ON pixel_spectra_mv (granule_id);
-
-CREATE INDEX pixel_spectra_mv_pixel_id_idx
-ON pixel_spectra_mv (pixel_id);
-
-CREATE INDEX pixel_spectra_mv_plot_name_idx
-ON pixel_spectra_mv (plot_name);
-
+CREATE VIEW extracted_spectra_view AS
+SELECT * from extracted_spectra;
 
 GRANT SELECT ON plot_pixels_mv TO postgrest_user;
-GRANT SELECT ON insitu_sample_trait_mv TO postgrest_user;
-GRANT SELECT ON pixel_spectra_mv TO postgrest_user;
+GRANT SELECT ON leaf_traits_view TO postgrest_user;
+GRANT SELECT ON extracted_spectra_view TO postgrest_user;
 
 DROP MATERIALIZED VIEW plot_pixels_mv;
-DROP MATERIALIZED VIEW insitu_sample_trait_mv;
-DROP MATERIALIZED VIEW pixel_spectra_mv;
+DROP VIEW leaf_traits_view;
+DROP  VIEW extracted_spectra_view;

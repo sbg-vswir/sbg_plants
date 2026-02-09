@@ -1,25 +1,20 @@
-import json
 import logging
+
 from app.filter_config import (
-    STRING_FIELDS,
-    NUMERIC_FIELDS,
-    BOOLEAN_FIELDS,
-    DATE_FIELDS,
     SPECIAL_FIELDS,
     VIEW_FIELD_CONFIG
 )
 
 from app.filter_utils import (
-    _get_field_type, _validate_polygon, 
+    _get_field_type,
     _build_string_clause, 
     _build_numeric_clause, 
     _build_boolean_clause, 
     _build_date_clause, 
     _build_date_range_clauses, 
-    _build_polygon_clause
+    _build_geom_clause
 )
 
-import logging
 
 logger = logging.getLogger("lambda_handler")
 
@@ -42,14 +37,12 @@ def build_where_clause(view_name, filters):
     
     view_config = VIEW_FIELD_CONFIG[view_name]
     allowed_fields = view_config["allowed_fields"]
-    date_column = view_config["date_column"]
+    date_column = view_config.get("date_column", None)
+    geom = filters.get("geom", None)
     
     clauses = []
     params = []
-    
-    # Validate and extract polygon
-    polygon = _validate_polygon(filters.get("polygon"))
-    
+     
     # Build clauses for each filter
     for col, val in filters.items():
         # Skip None values
@@ -78,11 +71,11 @@ def build_where_clause(view_name, filters):
         else:
             raise ValueError(f"Unknown field type for column '{col}'")
     
-    # Handle date range filters
-    _build_date_range_clauses(filters, date_column, clauses, params)
+    if date_column:
+        _build_date_range_clauses(filters, date_column, clauses, params)
     
-    # Handle polygon filter
-    _build_polygon_clause(polygon, clauses, params)
+    if geom:
+        _build_geom_clause(geom, clauses, params)
     
     # Construct final WHERE clause
     sql_where = " WHERE " + " AND ".join(clauses) if clauses else ""
@@ -91,31 +84,3 @@ def build_where_clause(view_name, filters):
     logger.debug("Generated params: %s", params)
     
     return sql_where, tuple(params)
-
-# ============================================================================
-# USAGE EXAMPLES
-# ============================================================================
-
-if __name__ == "__main__":
-    # Example 1: plot_pixels_mv
-    filters1 = {
-        "plot_name": ["276-ER18", "001-ER18"],
-        "campaign_name": ["East River 2018"],
-        "start_date": "2018-01-01",
-        "end_date": "2018-12-31"
-    }
-    sql, params = build_where_clause("plot_pixels_mv", filters1)
-    print(f"\nSQL: {sql}")
-    print(f"Params: {params}")
-    
-    # Example 2: insitu_sample_trait_mv with range
-    filters2 = {
-        "plot_name": ["276-ER18"],
-        "trait": ["leaf_area"],
-        "value": {"min": 0.5, "max": 1.5},
-        "taxa": ["Salix planifolia"],
-        "start_date": "2018-06-01"
-    }
-    sql, params = build_where_clause("insitu_sample_trait_mv", filters2)
-    print(f"\nSQL: {sql}")
-    print(f"Params: {params}")

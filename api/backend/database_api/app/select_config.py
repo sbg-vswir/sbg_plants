@@ -6,9 +6,10 @@ SELECTABLE_COLUMNS = {
         'sensor_name',
         'granule_id',
         'granule_date',
-        'geom'  
+        'geom',
+        'pixel_ids' 
     ],
-    "insitu_sample_trait_mv": [
+    "leaf_traits_view": [
         'campaign_name',
         'site_id',
         'plot_name',
@@ -33,11 +34,7 @@ SELECTABLE_COLUMNS = {
         'plot_method',
         'geom'
     ],
-    "pixel_spectra_mv": [
-        'plot_name',
-        'granule_id',
-        'granule_date',
-        'pixel_id',
-        'radiance'
+    "extracted_spectra_view": [
+        'pixel_id'
     ]
 }

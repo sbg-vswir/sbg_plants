@@ -13,20 +13,6 @@ from app.filter_config import (
 #  QUERY BUILDING FUNCTIONS
 # ============================================================================
 
-def _validate_polygon(polygon):
-    """Validate that polygon is a proper GeoJSON Polygon or MultiPolygon."""
-    if polygon is None:
-        return None
-    
-    if not (
-        isinstance(polygon, dict)
-        and polygon.get("type") in {"Polygon", "MultiPolygon"}
-        and "coordinates" in polygon
-    ):
-        raise ValueError("`polygon` must be a GeoJSON Polygon or MultiPolygon")
-    
-    return polygon
-
 
 def _build_string_clause(col, val, clauses, params):
     """Build WHERE clause for string fields (supports lists)."""
@@ -44,31 +30,56 @@ def _build_string_clause(col, val, clauses, params):
         clauses.append(f'"{col}" = %s')
         params.append(val)
 
-
 def _build_numeric_clause(col, val, clauses, params):
-    """Build WHERE clause for numeric fields (supports single value, list, or range)."""
+    """
+    Build WHERE clause for numeric fields.
+    
+    Supports:
+    - Single value: 5
+    - List of values: [1,2,3]
+    - Range dict: {"min": 0.5, "max": 1.5}
+    - List of tuples (start, end) for ranges: [(1,3), (5,6)]
+    """
     if isinstance(val, dict):
-        # Support range queries: {"min": 0.5, "max": 1.5}
+        # Range query: {"min": x, "max": y}
         if "min" in val and val["min"] is not None:
             clauses.append(f'"{col}" >= %s')
             params.append(val["min"])
         if "max" in val and val["max"] is not None:
             clauses.append(f'"{col}" <= %s')
             params.append(val["max"])
+    
     elif isinstance(val, list):
-        # Support list of specific values
         if not val:
             return
-        val = [v for v in val if v is not None]
-        if not val:
-            return
-        placeholders = ", ".join(["%s"] * len(val))
-        clauses.append(f'"{col}" IN ({placeholders})')
-        params.extend(val)
+
+        # Check if it's a list of tuples (ranges)
+        if all(isinstance(v, tuple) and len(v) == 2 or isinstance(v, list) and len(v) == 2 for v in val):
+            # Each tuple is a range (start, end)
+            range_clauses = []
+            for start, end in val:
+                if start == end:
+                    range_clauses.append(f'"{col}" = %s')
+                    params.append(start)
+                else:
+                    range_clauses.append(f'"{col}" BETWEEN %s AND %s')
+                    params.extend([start, end])
+            clauses.append("(" + " OR ".join(range_clauses) + ")")
+        
+        else:
+            # Regular list of values
+            val = [v for v in val if v is not None]
+            if not val:
+                return
+            placeholders = ", ".join(["%s"] * len(val))
+            clauses.append(f'"{col}" IN ({placeholders})')
+            params.extend(val)
+    
     else:
         # Single value
         clauses.append(f'"{col}" = %s')
         params.append(val)
+
 
 
 def _build_boolean_clause(col, val, clauses, params):
@@ -112,13 +123,26 @@ def _build_date_range_clauses(filters, date_column, clauses, params):
         params.append(filters["end_date"])
 
 
-def _build_polygon_clause(polygon, clauses, params):
-    """Build WHERE clause for polygon intersection."""
-    if polygon is not None:
-        clauses.append(
-            'ST_Intersects(geom, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))'
-        )
-        params.append(json.dumps(polygon))
+# def _build_geom_clause(geom, clauses, params):
+#     """Build WHERE clause for geom intersection."""
+#     # clauses.append(
+#     #     'ST_Intersects(geom, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))'
+#     # )
+#     clauses.append(
+#         'geom && ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326) AND ST_Intersects(geom, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))'
+#     )
+#     params.append(json.dumps(geom))
+
+def _build_geom_clause(geom, clauses, params):
+    """Build WHERE clause for geom intersection."""
+    # optimally uses the spatial index by first doing geom && ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326) filtering via bounding boxes
+    # the second query ST_Intersects(geom, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))" then parses out false positives, things withing the bbox but not the polygon
+    clauses.append(
+        "geom && ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326) "
+        "AND ST_Intersects(geom, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))"
+    )
+    params.extend([json.dumps(geom), json.dumps(geom)])
+
 
 
 def _get_field_type(col):

@@ -6,18 +6,18 @@ from app.filter import build_where_clause
 
 logger = logging.getLogger("lambda_handler")
 
-ALLOWED_VIEWS = ["plot_pixels_mv", "insitu_sample_trait_mv", "pixel_spectra_mv"]
+ALLOWED_VIEWS = ["plot_pixels_mv", "leaf_traits_view", "extracted_spectra_view"]
 
 VIEW_MAP = {
     "plot_pixels_mv": True,
-    "insitu_sample_trait_mv": True,
-    "pixel_spectra_mv": False
+    "leaf_traits_view": True,
+    "extracted_spectra_view": False
 }
 
 ASYNC_VIEWS = {
     "plot_pixels_mv": False,
-    "insitu_sample_trait_mv": False,
-    "pixel_spectra_mv": True
+    "leaf_traits_view": False,
+    "extracted_spectra_view": True
 }
 
 
@@ -59,7 +59,7 @@ def build_query(view_name: str, select_statement:str,  limit: int = None, offset
         sql += " LIMIT %s"
         params.append(int(limit))
         
-    # --- LIMIT clause ---
+    # --- OFFSET clause ---
     if offset:
         sql += " OFFSET %s"
         params.append(int(offset))
@@ -71,7 +71,6 @@ def build_query(view_name: str, select_statement:str,  limit: int = None, offset
     return sql, params
 
 def execute_query(view_name: str, sql: str, params: list, debug: bool = False):
-    # --- Conditional debug logging ---
     logger.debug("Executing query on view: %s", view_name)
     logger.debug("SQL: %s", sql)
     logger.debug("Params: %s", params)

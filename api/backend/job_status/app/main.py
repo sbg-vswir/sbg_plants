@@ -1,7 +1,8 @@
 import os
 import boto3
+import json
 
-dynamodb = boto3.client("dynamodb")
+dynamodb = boto3.client("dynamodb", region_name='us-west-2')
 JOB_TABLE = os.environ["JOB_TABLE"]
 
 def lambda_handler(event, context):
@@ -20,9 +21,9 @@ def lambda_handler(event, context):
 
     return {
         "statusCode": 200,
-        "body": {
+        "body": json.dumps({
             "status": item.get("status", {}).get("S"),
             "rows_processed": int(item.get("rows_processed", {}).get("N", 0)),
             "presigned_url": item.get("presigned_url", {}).get("S")
-        }
+        })
     }

@@ -47,7 +47,7 @@ DATE_FIELDS = {
 
 # Special fields (handled separately)
 SPECIAL_FIELDS = {
-    "polygon",
+    "geom",
     "start_date",
     "end_date"
 }
@@ -60,11 +60,12 @@ VIEW_FIELD_CONFIG = {
             "campaign_name",
             "sensor_name",
             "granule_id",
-            "granule_date"
+            "granule_date",
+            "geom"
         },
         "date_column": "granule_date" 
     },
-    "insitu_sample_trait_mv": {
+    "leaf_traits_view": {
         "allowed_fields": {
             "plot_name",
             "campaign_name",
@@ -90,17 +91,13 @@ VIEW_FIELD_CONFIG = {
             "floristic_survey",
             "plot_method",
             "collection_date"
+            "geom"
         },
         "date_column": "collection_date"
     },
-    "pixel_spectra_mv": {
+    "extracted_spectra_view": {
         "allowed_fields": {
-            "plot_name",
-            "granule_id",
-            "granule_date",
-            "pixel_id",
-            'granule_date'
-        },
-        "date_column": "granule_date" 
+            "pixel_id"
+        }
     }
 }

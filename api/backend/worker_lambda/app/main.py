@@ -17,7 +17,7 @@ def lambda_handler(event, context):
     bucket = os.environ['S3_BUCKET']
     job_table = os.environ['JOB_TABLE']
 
-    for record in event["Records"]:
+    for record in event.get("Records", []):
         payload = {}
         try:
             payload = json.loads(record["body"])
@@ -45,19 +45,25 @@ def lambda_handler(event, context):
                 rows_processed = 0
                 parts = []
                 part_number = 1
-                buffer = io.StringIO()
 
                 # Start multipart upload
                 mpu = s3.create_multipart_upload(Bucket=bucket, Key=key)
+                logger.debug("Started multipart upload: %s", mpu["UploadId"])
+                with conn.cursor(name="stream_cursor") as cur:
+                    cur.itersize = 30000
+                    cur.execute(sql, params)
 
-                for chunk in pd.read_sql(sql, conn, params=params, chunksize=10000):
-                    rows_processed += len(chunk)
-                    chunk.to_csv(buffer, index=False, header=(part_number==1))
+                    while True:
+                        rows = cur.fetchmany(cur.itersize)
+                        if not rows:
+                            break
+                        chunk = pd.DataFrame(rows, columns=[desc[0] for desc in cur.description])
 
-                    # Upload if buffer > 5 MB
-                    if buffer.tell() > 5 * 1024 * 1024:
+                        buffer = io.StringIO()
+                        chunk.to_csv(buffer, index=False, header=(part_number==1))
+
                         buffer.seek(0)
-                        logger.debug("Uploading part %d, rows so far=%d", part_number, rows_processed)
+                        logger.debug("Uploading part %d", part_number)
                         response = s3.upload_part(
                             Bucket=bucket,
                             Key=key,
@@ -65,10 +71,14 @@ def lambda_handler(event, context):
                             UploadId=mpu["UploadId"],
                             Body=buffer.read()
                         )
-                        parts.append({"ETag": response["ETag"], "PartNumber": part_number})
-                        part_number += 1
-                        buffer = io.StringIO()  # reset buffer
+                        buffer.close()
+                        buffer = None  # free memory
+                        chunk = None
 
+                        parts.append({"ETag": response["ETag"], "PartNumber": part_number})
+                        logger.debug("Uploaded part %d with ETag %s", part_number, response["ETag"])
+                        part_number += 1
+                        rows_processed += len(rows)
                         # Update DynamoDB progress
                         dynamodb.update_item(
                             TableName=job_table,
@@ -76,44 +86,10 @@ def lambda_handler(event, context):
                             UpdateExpression="SET rows_processed = :r",
                             ExpressionAttributeValues={":r": {"N": str(rows_processed)}}
                         )
-
-                        logger.debug("Uploaded part %d for job_id=%s, total rows=%d", part_number-1, job_id, rows_processed)
-
-                # Upload remaining data
-                if buffer.tell() > 0:
-                    buffer.seek(0)
-                    logger.debug("Uploading final part %d, rows=%d", part_number, rows_processed)
-                    response = s3.upload_part(
-                        Bucket=bucket,
-                        Key=key,
-                        PartNumber=part_number,
-                        UploadId=mpu["UploadId"],
-                        Body=buffer.read()
-                    )
-                    parts.append({"ETag": response["ETag"], "PartNumber": part_number})
-                    logger.debug("part_uploaded %d, rows=%d", part_number, rows_processed)
-                    # # Update DynamoDB progress
-                    # dynamodb.update_item(
-                    #     TableName=job_table,
-                    #     Key={"job_id": {"S": job_id}},
-                    #     UpdateExpression="SET rows_processed = :r",
-                    #     ExpressionAttributeValues={":r": {"N": str(rows_processed)}}
-                    # )
-                    
-                    ttl = int(time.time()) + 1*24*3600  # expire in 1 days
-                    dynamodb.update_item(
-                        TableName=job_table,
-                        Key={"job_id": {"S": job_id}},
-                        UpdateExpression="SET rows_processed = :r, expire_at = :ttl",
-                        ExpressionAttributeValues={
-                            ":r": {"N": str(rows_processed)},
-                            ":ttl": {"N": str(ttl)}
-                        }
-                    )
-                    logger.debug("db updated")
+                        logger.debug("Updated DynamoDB rows_processed=%d for job_id=%s", rows_processed, job_id)
 
                 # Complete multipart upload
-                logger.debug("starting final upload")
+                logger.debug("Completing multipart upload for job_id=%s", job_id)
                 s3.complete_multipart_upload(
                     Bucket=bucket,
                     Key=key,
@@ -130,35 +106,40 @@ def lambda_handler(event, context):
                 Params={"Bucket": bucket, "Key": key},
                 ExpiresIn=6*3600
             )
+            logger.debug("Generated presigned URL for job_id=%s", job_id)
 
+            # Add TTL (expire in 1 day)
+            ttl = int(time.time()) + 1 * 24 * 3600
+
+            # Update DynamoDB with URL, status, and TTL
             dynamodb.update_item(
                 TableName=job_table,
                 Key={"job_id": {"S": job_id}},
-                UpdateExpression="SET presigned_url = :url, #status = :s",
-                ExpressionAttributeNames={
-                    "#status": "status"  # Add this!
-                },
+                UpdateExpression="SET presigned_url = :url, #status = :s, expire_at = :ttl",
+                ExpressionAttributeNames={"#status": "status"},
                 ExpressionAttributeValues={
-                    ":url": {"S": presigned_url}, 
-                    ":s": {"S": "complete"}
+                    ":url": {"S": presigned_url},
+                    ":s": {"S": "complete"},
+                    ":ttl": {"N": str(ttl)}
                 }
             )
-            logger.debug("DynamoDB updated with presigned URL for job_id=%s", job_id)
+            logger.debug("Updated DynamoDB with presigned URL and status=complete for job_id=%s", job_id)
 
         except Exception:
             logger.exception("Job failed for record: %s", record)
             job_id = payload.get("job_id")
             job_table = payload.get("job_table")
             if job_id and job_table:
+                ttl = int(time.time()) + 1 * 24 * 3600  # 1 day for failed job
                 dynamodb.update_item(
                     TableName=job_table,
                     Key={"job_id": {"S": job_id}},
-                    UpdateExpression="SET #status = :s",
-                    ExpressionAttributeNames={
-                        "#status": "status"
-                    },
+                    UpdateExpression="SET #status = :s, expire_at = :ttl",
+                    ExpressionAttributeNames={"#status": "status"},
                     ExpressionAttributeValues={
-                        ":s": {"S": "failed"}
+                        ":s": {"S": "failed"},
+                        ":ttl": {"N": str(ttl)}
                     }
                 )
+                logger.debug("Updated DynamoDB status=failed with TTL for job_id=%s", job_id)
             continue

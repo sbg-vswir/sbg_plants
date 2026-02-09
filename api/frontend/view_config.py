@@ -16,7 +16,7 @@ VIEW_CONFIGS = {
              "placeholder": "YYYY-MM-DD"},
         ]
     },
-    "insitu_sample_trait_mv": {
+    "leaf_traits_view": {
         "filters": [
             {"id": "campaign_name", "label": "Campaign Name:", "type": "text", 
              "placeholder": "e.g., East River 2018"},
@@ -55,9 +55,10 @@ SELECT_CONFIGS = {
         'sensor_name',
         'granule_id',
         'granule_date',
+        'pixel_ids',
         'geom'  
     ],
-    "insitu_sample_trait_mv": [
+    "leaf_traits_view": [
         'campaign_name',
         'site_id',
         'plot_name',
@@ -81,5 +82,8 @@ SELECT_CONFIGS = {
         'floristic_survey',
         'plot_method',
         'geom'
+    ],
+    "extracted_spectra_view": [
+        "pixel_id"
     ]
 }

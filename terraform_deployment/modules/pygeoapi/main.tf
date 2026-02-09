@@ -190,6 +190,11 @@ resource "aws_apigatewayv2_route" "json_view" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
+resource "aws_apigatewayv2_route" "json_view_post" {
+  api_id    = aws_apigatewayv2_api.pygeoapi.id
+  route_key = "POST /views/{view_name}"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.pygeoapi.id
   name        = "$default"    # special default stage
@@ -410,7 +415,7 @@ resource "aws_lambda_function" "worker_lambda" {
   }
 
   timeout     = 900
-  memory_size = 2048
+  memory_size = 1024 * 3
 }
 
 
@@ -485,7 +490,8 @@ resource "aws_lambda_function" "job_status" {
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
   
-  filename = "${path.module}/job_status.zip"
+  filename      = "${path.module}/job_status.zip"
+  source_code_hash = filebase64sha256("${path.module}/job_status.zip")
 
   memory_size   = 128
   timeout       = 10
