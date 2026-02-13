@@ -163,7 +163,7 @@ def lambda_handler(event, context):
                 "Content-Type": "application/octet-stream",
                 "Content-Disposition": f"attachment; filename={view_name}.parquet"
             },
-            "body": base64.b64encode(parquet_bytes).decode('utf-8'),
+            "body": base64.b64encode(parquet_bytes),
             "isBase64Encoded": True
         }
     
@@ -181,7 +181,7 @@ def lambda_handler(event, context):
                 "Content-Type": "application/octet-stream",
                 "Content-Disposition": f"attachment; filename={view_name}.parquet"
             },
-            "body": base64.b64encode(parquet_bytes).decode('utf-8'),
+            "body": base64.b64encode(parquet_bytes),
             "isBase64Encoded": True
         }
 

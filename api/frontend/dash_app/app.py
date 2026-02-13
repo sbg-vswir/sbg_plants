@@ -181,7 +181,6 @@ def fetch_parquet(view, filters, geojson_content=None, limit=None, offset=0):
 
     resp = requests.post(API_URL.format(view), json=payload)
     resp.raise_for_status()
-    
     df = gpd.read_parquet(io.BytesIO(resp.content))
     
     return df

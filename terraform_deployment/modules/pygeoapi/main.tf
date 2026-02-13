@@ -174,6 +174,24 @@ resource "aws_lambda_function" "pygeoapi" {
 resource "aws_apigatewayv2_api" "pygeoapi" {
   name          = "${var.name}-gateway"
   protocol_type = "HTTP"
+   cors_configuration {
+    allow_origins = [
+      "http://localhost:3000"
+    ]
+    allow_methods = [
+      "GET",
+      "POST",
+      "OPTIONS"
+    ]
+    allow_headers = [
+      "content-type",
+      "authorization"
+    ]
+    expose_headers = [
+      "content-type"
+    ]
+    max_age = 3600
+  }
 }
 
 # Lambda integration

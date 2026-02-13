@@ -1,0 +1,160 @@
+/* Additional styles for VSWIR Plants app */
+
+/* Leaflet map container */
+.leaflet-container {
+  font-family: 'Roboto', sans-serif;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Fix Leaflet marker icons (they don't load properly by default in React) */
+.leaflet-marker-icon {
+  background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
+}
+
+.leaflet-marker-shadow {
+  background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png');
+}
+
+/* Custom popup styling */
+.leaflet-popup-content-wrapper {
+  border-radius: 4px;
+  padding: 0;
+}
+
+.leaflet-popup-content {
+  margin: 12px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Table cell ellipsis for long content */
+.MuiTableCell-root {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Make table scrollable */
+.MuiTableContainer-root {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+/* File upload styling */
+input[type="file"] {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif;
+}
+
+input[type="file"]:hover {
+  border-color: #1976d2;
+}
+
+/* Loading overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+/* Button group spacing */
+.button-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Responsive map */
+@media (max-width: 768px) {
+  .leaflet-container {
+    height: 300px !important;
+  }
+}
+
+/* Status indicators */
+.status-polling {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-polling::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4caf50;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Download link styling */
+a.download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #1976d2;
+  color: white;
+  text-decoration: none;
+  border-radius: 4px;
+  font-weight: 500;
+  transition: background 0.3s;
+}
+
+a.download-link:hover {
+  background: #1565c0;
+}
+
+a.download-link.disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Filter section */
+.filter-section {
+  background: #f5f5f5;
+  padding: 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+/* Job status card */
+.job-status {
+  background: #e3f2fd;
+  padding: 16px;
+  border-radius: 4px;
+  border-left: 4px solid #1976d2;
+}
+
+.job-status.complete {
+  background: #e8f5e9;
+  border-left-color: #4caf50;
+}
+
+.job-status.error {
+  background: #ffebee;
+  border-left-color: #f44336;
+}
