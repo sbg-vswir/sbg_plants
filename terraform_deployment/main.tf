@@ -26,9 +26,9 @@ module "rds" {
 
 }
 
-module "pygeoapi" {
+module "api" {
 
-  source                 = "./modules/pygeoapi"
+  source                 = "./modules/api"
 
   vpc_id             = module.network.vpc_id
   public_subnet_ids = module.network.subnet_public_ids
@@ -43,4 +43,14 @@ module "pygeoapi" {
   db_user_password = var.db_user_password
   db_host_url = module.rds.db_instance_endpoint
   region = var.region
+}
+
+module "cognito" {
+
+  source                 = "./modules/cognito"
+}
+
+module "frontend" {
+
+  source                 = "./modules/frontend"
 }

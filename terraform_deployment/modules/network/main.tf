@@ -31,7 +31,10 @@ resource "aws_subnet" "public" {
   tags = merge(var.tags, { "Name" = "public-${count.index}" })
 
   lifecycle {
-    ignore_changes = [availability_zone]
+    ignore_changes = [
+      availability_zone,
+      cidr_block
+    ]
   }
 }
 
@@ -47,7 +50,9 @@ resource "aws_subnet" "private" {
   tags = merge(var.tags, { "Name" = "private-${count.index}" })
 
   lifecycle {
-    ignore_changes = [availability_zone]
+    ignore_changes = [      
+      availability_zone,
+      cidr_block]
   }
 }
 
@@ -66,7 +71,7 @@ resource "aws_route" "internet_access" {
 }
 
 
-#Create a new route table for the private subnets, 
+# Create a new route table for the private subnets, 
 resource "aws_route_table" "private" {
     count  = length(var.aws_availability_zones)
     vpc_id = aws_vpc.main.id
@@ -74,16 +79,30 @@ resource "aws_route_table" "private" {
 }
 
 
-# Explicitly associate the newly created route tables to the private subnets (so they don't default to the main route table)
-resource "aws_route_table_association" "private" {
-    count          = length(var.aws_availability_zones)
-    subnet_id      = element(aws_subnet.private.*.id, count.index)
-    route_table_id = element(aws_route_table.private.*.id, count.index)
+variable "private_subnet_to_rt" {
+  type = map(string)
+  default = {
+    "subnet-06884e5beb7fd2f8b" = "rtb-0365520b4a1559725"
+    "subnet-0733fed6dff9e9f29" = "rtb-0170d75790e6ec02e"
+  }
 }
 
+resource "aws_route_table_association" "private" {
+  for_each      = var.private_subnet_to_rt
+  subnet_id     = each.key
+  route_table_id = each.value
+}
+
+# # Explicitly associate the newly created route tables to the private subnets (so they don't default to the main route table)
+# resource "aws_route_table_association" "private" {
+#     count          = length(var.aws_availability_zones)
+#     subnet_id      = element(aws_subnet.private.*.id, count.index)
+#     route_table_id = element(aws_route_table.private.*.id, count.index)
+# }
+
 resource "aws_security_group" "main" {
-  name        = "${var.name}-main"
-  description = "Main security group for VPC"
+  name        = "vswir-plants_security_group"
+  description = "security group for plants database"
   vpc_id = aws_vpc.main.id
 
   egress {

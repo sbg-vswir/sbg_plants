@@ -3,41 +3,67 @@ import {
   AppBar,
   Toolbar,
   Typography,
-  FormControl,
-  InputLabel,
   Select,
   MenuItem,
-  IconButton
+  IconButton,
+  Box,
+  Button
 } from '@mui/material';
-import {
-  Science as ScienceIcon,
-  Refresh as RefreshIcon
-} from '@mui/icons-material';
+import { Refresh as RefreshIcon, Logout as LogoutIcon } from '@mui/icons-material';
+import { redirectToLogout } from '../utils/auth';
 
-function Navbar({ view, views, onViewChange, onReset }) {
+function Navbar({ view, views, onViewChange, onReset, showControls = true }) {
   return (
-    <AppBar position="static" elevation={2}>
-      <Toolbar>
-        <ScienceIcon sx={{ mr: 2, fontSize: 32 }} />
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 600 }}>
-          VSWIR Plants
-        </Typography>
-        
-        {/* View Selector */}
-        <FormControl variant="outlined" size="small" sx={{ minWidth: 200, bgcolor: 'white', borderRadius: 1 }}>
-          <InputLabel>View</InputLabel>
-          <Select value={view} onChange={onViewChange} label="View">
-            {views.map(v => (
-              <MenuItem key={v} value={v}>{v}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        
-        <IconButton color="inherit" onClick={onReset} sx={{ ml: 2 }}>
-          <RefreshIcon />
-        </IconButton>
-      </Toolbar>
-    </AppBar>
+    <>
+      <AppBar position="fixed" elevation={2}>
+        <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            VSWIR Plants
+          </Typography>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {/* Only show view selector and reset when logged in */}
+            {showControls && (
+              <>
+                <Select
+                  value={view}
+                  onChange={onViewChange}
+                  variant="standard"
+                  sx={{
+                    color: 'white',
+                    '& .MuiSelect-icon': { color: 'white' },
+                    minWidth: 120
+                  }}
+                >
+                  {views.map(v => (
+                    <MenuItem key={v} value={v}>
+                      {v}
+                    </MenuItem>
+                  ))}
+                </Select>
+
+                <IconButton color="inherit" onClick={onReset} title="Reset">
+                  <RefreshIcon />
+                </IconButton>
+              </>
+            )}
+
+            {/* Logout always visible when navbar is shown */}
+            <Button
+              color="inherit"
+              onClick={redirectToLogout}
+              startIcon={<LogoutIcon />}
+              sx={{ textTransform: 'none', fontWeight: 500 }}
+            >
+              Logout
+            </Button>
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      {/* Spacer to avoid overlap with fixed AppBar */}
+      <Toolbar />
+    </>
   );
 }
 

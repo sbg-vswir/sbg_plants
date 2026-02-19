@@ -176,7 +176,8 @@ resource "aws_apigatewayv2_api" "pygeoapi" {
   protocol_type = "HTTP"
    cors_configuration {
     allow_origins = [
-      "http://localhost:3000"
+      "http://localhost:3000", 
+      "https://plants.airborne.smce.nasa.gov"
     ]
     allow_methods = [
       "GET",

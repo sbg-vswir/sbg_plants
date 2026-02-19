@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react'; // single import
 import { Container, Box, CircularProgress, Alert } from '@mui/material';
 import Navbar from './components/Navbar';
 import FilterSection from './components/FilterSection';
@@ -7,19 +7,15 @@ import MapView from './components/MapView';
 import DataTable from './components/DataTable';
 import { VIEW_CONFIGS, SELECT_CONFIGS } from './viewConfig';
 import { fetchParquet, extractSpectra } from './utils/api';
-import { 
-  parseFilters, 
-  summarizeValue, 
-  convertToCSV, 
-  extractPixelIds, 
-  toRanges 
-} from './utils/helpers';
+import { parseFilters, summarizeValue, convertToCSV, extractPixelIds, toRanges } from './utils/helpers';
 import { useJobPolling } from './hooks/useJobPolling';
+import LoginButton from "./components/LoginButton";
+import { getAuthCode, getStoredTokens, storeTokens, exchangeCodeForTokens, isTokenExpired, redirectToLogin } from "./utils/auth";
 
 const PAGE_SIZE = 4000;
 
 function App() {
-  // State
+  const [authState, setAuthState] = useState('loading');
   const [view, setView] = useState('plot_pixels_mv');
   const [filterValues, setFilterValues] = useState({});
   const [geojsonFile, setGeojsonFile] = useState(null);
@@ -36,11 +32,8 @@ function App() {
   const [nextDisabled, setNextDisabled] = useState(true);
   const [extractDisabled, setExtractDisabled] = useState(true);
   const [downloadTableDisabled, setDownloadTableDisabled] = useState(true);
-  
-  // Custom hook for job polling
-  const { rowsProcessed, downloadUrl, pollingError, status} = useJobPolling(jobId, isPolling);
 
-  // Get current view config
+  const { rowsProcessed, downloadUrl, pollingError, status } = useJobPolling(jobId, isPolling);
   const currentViewConfig = VIEW_CONFIGS[view] || { filters: [] };
   const views = Object.keys(VIEW_CONFIGS);
 
@@ -67,6 +60,29 @@ function App() {
     return cols;
   }, [tableData]);
 
+
+  useEffect(() => {
+    const tokens = getStoredTokens();
+    const code = getAuthCode();
+
+    if (tokens && !isTokenExpired(tokens)) {
+      setAuthState('loggedIn');
+    } else if (code) {
+      window.history.replaceState({}, document.title, '/');
+      exchangeCodeForTokens(code)
+        .then((tokens) => {
+          storeTokens(tokens);
+          setAuthState('loggedIn');
+        })
+        .catch((err) => {
+          console.error('Auth failed:', err.message);
+          setAuthState('loggedOut');
+        });
+    } else {
+      setAuthState('loggedOut');
+    }
+  }, []);
+ 
   // Handlers
   const handleViewChange = (e) => {
     const newView = e.target.value;
@@ -244,6 +260,13 @@ function App() {
     setError(null);
   };
 
+  if (authState === 'loading') return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <CircularProgress />
+    </Box>
+  );
+  if (authState === 'loggedOut') return <LoginButton />;
+
   return (
     <Box sx={{ flexGrow: 1 }}>
       <Navbar 
@@ -311,4 +334,4 @@ function App() {
   );
 }
 
-export default App;
+export default App; 

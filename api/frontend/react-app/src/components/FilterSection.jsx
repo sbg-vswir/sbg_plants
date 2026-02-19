@@ -98,7 +98,7 @@ function FilterSection({
         <Button
           variant="contained"
           color="secondary"
-          startIcon={<ScienceIcon />}
+          // startIcon={<ScienceIcon />}
           onClick={onExtractSpectra}
           disabled={extractDisabled || loading}
         >
