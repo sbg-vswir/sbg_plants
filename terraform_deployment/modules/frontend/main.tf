@@ -87,6 +87,7 @@ resource "aws_acm_certificate" "domain_cert_us_east_1" {
   lifecycle {
     create_before_destroy = true
   }
+  tags = var.tags
 }
 
 resource "aws_route53_record" "cert_validation" {
@@ -210,9 +211,7 @@ resource "aws_cloudfront_distribution" "spa_cdn" {
     }
   }
 
-  tags = {
-    Project = "VSWIR Plants"
-  }
+  tags = var.tags
 }
 
 #########################
@@ -264,19 +263,4 @@ resource "null_resource" "spa_invalidate" {
         --paths "/*"
     EOT
   }
-}
-
-#########################
-# Outputs
-#########################
-output "cloudfront_domain" {
-  value = aws_cloudfront_distribution.spa_cdn.domain_name
-}
-
-output "cloudfront_distribution_id" {
-  value = aws_cloudfront_distribution.spa_cdn.id
-}
-
-output "spa_url" {
-  value = "https://${var.spa_subdomain}"
 }

@@ -48,9 +48,31 @@ module "api" {
 module "cognito" {
 
   source                 = "./modules/cognito"
+
+  aws_region = var.region
+  spa_domain = var.spa_domain
+  name = var.name
+  tags = var.tags
+  
 }
 
 module "frontend" {
 
   source                 = "./modules/frontend"
+  aws_region = var.region
+  spa_subdomain = replace(var.spa_domain, "https://", "")
+  root_domain = replace(replace(var.spa_domain, "https://", ""), "plants.", "")
+  tags = var.tags
+}
+
+module "admin_backend" {
+
+  source                 = "./modules/admin_backend"
+
+  aws_region = var.region
+  api_id = module.api.api_id
+  cognito_user_pool_id = module.cognito.user_pool_id
+  cognito_client_id = module.cognito.user_pool_client_id
+  cognito_user_pool_arn = module.cognito.user_pool_arn
+  api_execution_arn = module.api.api_execution_arn
 }

@@ -54,3 +54,8 @@ variable "db_user" {
 variable "db_user_password" {
     type  = string
 }
+
+variable "spa_domain" {
+  description = "Full domain of the SPA (used for callback and logout URLs)"
+  type        = string
+}

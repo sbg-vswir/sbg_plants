@@ -182,7 +182,8 @@ resource "aws_apigatewayv2_api" "pygeoapi" {
     allow_methods = [
       "GET",
       "POST",
-      "OPTIONS"
+      "OPTIONS",
+      "DELETE"
     ]
     allow_headers = [
       "content-type",

@@ -1,59 +1,4 @@
-#########################
-# Provider
-#########################
-provider "aws" {
-  region = var.aws_region
-}
 
-#########################
-# Variables
-#########################
-variable "aws_region" {
-  description = "AWS region to deploy Cognito resources"
-  type        = string
-  default     = "us-west-2"
-}
-
-variable "spa_domain" {
-  description = "Full domain of the SPA (used for callback and logout URLs)"
-  type        = string
-  default     = "https://plants.airborne.smce.nasa.gov"
-}
-
-variable "spa_callback_path" {
-  description = "Path on the SPA that Cognito redirects to after login"
-  type        = string
-  # default     = "/auth/callback"
-  default = ""
-}
-
-variable "user_pool_name" {
-  description = "Name of the Cognito User Pool"
-  type        = string
-  default     = "vswir-plants-user-pool"
-}
-
-variable "user_pool_client_name" {
-  description = "Name of the Cognito User Pool Client"
-  type        = string
-  default     = "vswir-spa-client"
-}
-
-variable "use_random_suffix" {
-  description = "Append a random suffix to the Cognito Hosted UI domain for uniqueness"
-  type        = bool
-  default     = true
-}
-
-variable "local_dev_domain" {
-  description = "Local development URL for testing (leave empty to disable)"
-  type        = string
-  default     = "http://localhost:3000"
-}
-
-#########################
-# Locals
-#########################
 locals {
   callback_url       = "${var.spa_domain}${var.spa_callback_path}"
   local_callback_url = var.local_dev_domain != "" ? "${var.local_dev_domain}${var.spa_callback_path}" : null
@@ -75,8 +20,9 @@ resource "random_id" "suffix" {
 #########################
 # Cognito User Pool
 #########################
+# Your single user pool
 resource "aws_cognito_user_pool" "vswir_user_pool" {
-  name = var.user_pool_name
+  name = "vswir-user-pool"
 
   auto_verified_attributes = ["email"]
 
@@ -99,20 +45,37 @@ resource "aws_cognito_user_pool" "vswir_user_pool" {
     allow_admin_create_user_only = true
   }
 
-  tags = {
-    Project = "VSWIR Plants"
-  }
+  tags = var.tags
 
   lifecycle {
     prevent_destroy = true
   }
 }
 
+# Groups inside that user pool
+resource "aws_cognito_user_group" "users" {
+  name         = "users"
+  user_pool_id = aws_cognito_user_pool.vswir_user_pool.id
+  precedence   = 10
+}
+
+resource "aws_cognito_user_group" "admins" {
+  name         = "admins"
+  user_pool_id = aws_cognito_user_pool.vswir_user_pool.id
+  precedence   = 2
+}
+
+resource "aws_cognito_user_group" "superadmins" {
+  name         = "superadmins"
+  user_pool_id = aws_cognito_user_pool.vswir_user_pool.id
+  precedence   = 1
+}
+
 #########################
 # Cognito User Pool Client (SPA)
 #########################
 resource "aws_cognito_user_pool_client" "vswir_spa_client" {
-  name         = var.user_pool_client_name
+  name         = "vswir-spa-client"
   user_pool_id = aws_cognito_user_pool.vswir_user_pool.id
 
   generate_secret = false
@@ -140,6 +103,7 @@ resource "aws_cognito_user_pool_client" "vswir_spa_client" {
   access_token_validity  = 60
   id_token_validity      = 60
   refresh_token_validity = 1
+
 }
 
 #########################
@@ -148,34 +112,4 @@ resource "aws_cognito_user_pool_client" "vswir_spa_client" {
 resource "aws_cognito_user_pool_domain" "vswir_domain" {
   domain       = "vswir-plants-auth${var.use_random_suffix ? "-${random_id.suffix[0].hex}" : ""}"
   user_pool_id = aws_cognito_user_pool.vswir_user_pool.id
-}
-
-#########################
-# Outputs
-#########################
-output "user_pool_id" {
-  value = aws_cognito_user_pool.vswir_user_pool.id
-}
-
-output "user_pool_client_id" {
-  value = aws_cognito_user_pool_client.vswir_spa_client.id
-}
-
-output "cognito_domain" {
-  value = local.cognito_base
-}
-
-output "callback_url" {
-  description = "The exact redirect_uri your SPA must send in the auth request"
-  value       = local.callback_url
-}
-
-output "login_url" {
-  description = "Direct link to the Cognito hosted UI login page"
-  value       = "${local.cognito_base}/login?client_id=${aws_cognito_user_pool_client.vswir_spa_client.id}&response_type=code&scope=openid%20email%20profile&redirect_uri=${local.encoded_callback}"
-}
-
-output "logout_url" {
-  description = "Direct link to the Cognito hosted UI logout endpoint"
-  value       = "${local.cognito_base}/logout?client_id=${aws_cognito_user_pool_client.vswir_spa_client.id}&logout_uri=${var.spa_domain}"
 }

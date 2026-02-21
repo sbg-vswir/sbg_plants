@@ -174,7 +174,7 @@ resource "aws_instance" "bastion_instance" {
   tags = var.tags
 
   lifecycle {
-  ignore_changes = [tags]
+  ignore_changes = [tags, associate_public_ip_address]
 }
 }
 
