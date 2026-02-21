@@ -2,7 +2,7 @@ const COGNITO_DOMAIN = import.meta.env.VITE_COGNITO_DOMAIN;
 export const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID;
 export const COGNITO_REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI;
 const COGNITO_LOGOUT_URI = import.meta.env.VITE_COGNITO_LOGOUT_URI;
-console.log(import.meta.env)
+
 // Redirect user to Cognito hosted UI login
 export function redirectToLogin() {
   const url = new URL(`${COGNITO_DOMAIN}/login`);
@@ -22,12 +22,12 @@ export function redirectToLogout() {
 }
 
 export async function exchangeCodeForTokens(code) {
-  console.log('attempting exchange with:', {
-    domain: COGNITO_DOMAIN,
-    client_id: COGNITO_CLIENT_ID,
-    redirect_uri: COGNITO_REDIRECT_URI,
-    code
-  });
+  // console.log('attempting exchange with:', {
+  //   domain: COGNITO_DOMAIN,
+  //   client_id: COGNITO_CLIENT_ID,
+  //   redirect_uri: COGNITO_REDIRECT_URI,
+  //   code
+  // });
 
   const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
     method: 'POST',
@@ -41,7 +41,7 @@ export async function exchangeCodeForTokens(code) {
   });
 
   const data = await response.json();
-  console.log('token response:', data); // logs error OR tokens
+  // console.log('token response:', data); // logs error OR tokens
 
   if (!response.ok) {
     throw new Error(data.error_description || data.error || 'Token exchange failed');

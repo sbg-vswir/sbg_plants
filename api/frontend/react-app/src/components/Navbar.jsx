@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -10,9 +10,15 @@ import {
   Button
 } from '@mui/material';
 import { Refresh as RefreshIcon, Logout as LogoutIcon } from '@mui/icons-material';
+import { AdminPanelSettings as AdminIcon } from '@mui/icons-material';
 import { redirectToLogout } from '../utils/auth';
+import { useIsAdmin } from '../hooks/useIsAdmin';
+import AdminDialog from './AdminDialog';
 
 function Navbar({ view, views, onViewChange, onReset, showControls = true }) {
+  const { isAdmin } = useIsAdmin();
+  const [adminOpen, setAdminOpen] = useState(false);
+
   return (
     <>
       <AppBar position="fixed" elevation={2}>
@@ -22,7 +28,6 @@ function Navbar({ view, views, onViewChange, onReset, showControls = true }) {
           </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {/* Only show view selector and reset when logged in */}
             {showControls && (
               <>
                 <Select
@@ -36,9 +41,7 @@ function Navbar({ view, views, onViewChange, onReset, showControls = true }) {
                   }}
                 >
                   {views.map(v => (
-                    <MenuItem key={v} value={v}>
-                      {v}
-                    </MenuItem>
+                    <MenuItem key={v} value={v}>{v}</MenuItem>
                   ))}
                 </Select>
 
@@ -48,7 +51,17 @@ function Navbar({ view, views, onViewChange, onReset, showControls = true }) {
               </>
             )}
 
-            {/* Logout always visible when navbar is shown */}
+            {isAdmin && (
+              <Button
+                color="inherit"
+                onClick={() => setAdminOpen(true)}
+                startIcon={<AdminIcon />}
+                sx={{ textTransform: 'none', fontWeight: 500 }}
+              >
+                Admin
+              </Button>
+            )}
+
             <Button
               color="inherit"
               onClick={redirectToLogout}
@@ -61,8 +74,9 @@ function Navbar({ view, views, onViewChange, onReset, showControls = true }) {
         </Toolbar>
       </AppBar>
 
-      {/* Spacer to avoid overlap with fixed AppBar */}
       <Toolbar />
+
+      <AdminDialog open={adminOpen} onClose={() => setAdminOpen(false)} />
     </>
   );
 }
