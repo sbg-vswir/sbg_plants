@@ -224,17 +224,62 @@ function App() {
 
   const handleDownloadTable = async () => {
     try {
+      const filename = window.prompt('Enter file name:', 'table_data');
+      if (!filename) return;
+
       const filters = parseFilters(filterValues, geojsonContent);
       const result = await fetchParquet(view, filters);
+
+      const columns = SELECT_CONFIGS[view];
+      const geomIndex = columns.findIndex(col => col.toLowerCase() === 'geometry' || col.toLowerCase() === 'geom');
+      const hasGeometry = geomIndex !== -1;
       
-      const csv = convertToCSV(result.data);
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'table_data.csv';
-      a.click();
-      window.URL.revokeObjectURL(url);
+      if (hasGeometry) {
+        const propertyColumns = columns.filter((_, i) => i !== geomIndex);
+
+        const features = result.data.map(row => {
+          const geometryValue = row[geomIndex];
+          const propValues = row.filter((_, i) => i !== geomIndex);
+
+          const properties = Object.fromEntries(
+            propertyColumns.map((col, i) => [col, propValues[i]])
+          );
+
+          let geometry = null;
+          try {
+            geometry = typeof geometryValue === 'string'
+              ? JSON.parse(geometryValue)
+              : geometryValue;
+          } catch {
+            geometry = null;
+          }
+
+          return { type: 'Feature', geometry, properties };
+        });
+     
+
+        const geojson = JSON.stringify({ type: 'FeatureCollection', features }, null, 2);
+        const blob = new Blob([geojson], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${filename}.geojson`;
+        document.body.appendChild(link);
+        link.click();
+        URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+      } else {
+        const cleanColumns = columns.map(col => col.label);
+        const rows = convertToCSV(result.data, cleanColumns);
+        const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows;
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `${filename}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     } catch (err) {
       setError(err.message);
     }

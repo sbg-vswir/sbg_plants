@@ -66,7 +66,7 @@ function JobStatus({ jobId, rowsProcessed, downloadUrl, status }) {
         <strong>Rows processed:</strong> {rowsProcessed.toLocaleString()}
       </Typography>
       
-      {downloadUrl && (
+      {downloadUrl && status === 'complete' && (
         <Button
           component={Link}
           href={downloadUrl}

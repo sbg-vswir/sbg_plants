@@ -81,23 +81,41 @@ export function parseFilters(filterValues, geojsonContent) {
   return filters;
 }
 
-/**
- * Convert data to CSV format
- */
-export function convertToCSV(data) {
+
+export function convertToCSV(data, columnNames) {
   if (!data.length) return '';
-  
-  const headers = Object.keys(data[0]);
-  const rows = data.map(row => 
-    headers.map(header => {
-      const val = row[header];
-      if (val === null || val === undefined) return '';
-      if (typeof val === 'object') return JSON.stringify(val);
-      return String(val).replace(/"/g, '""');
-    }).map(v => `"${v}"`).join(',')
-  );
-  
-  return [headers.join(','), ...rows].join('\n');
+
+  function formatCell(val) {
+    if (val === null || val === undefined) return '';
+
+    // Arrays → bracketed, comma-separated, **quoted** so Excel treats as one cell
+    if (Array.isArray(val)) {
+      return `"[` + val.join(',') + `]"`; // <-- this evaluates val, not string
+    }
+
+    // Dates → YYYY-MM-DD
+    if (val instanceof Date) return val.toISOString().slice(0, 10);
+
+    // Strings → escape quotes
+    let str = String(val);
+    if (str.includes('"')) str = str.replace(/"/g, '""');
+
+    // Quote if contains comma or newline
+    if (str.includes(',') || str.includes('\n')) return `"${str}"`;
+
+    return str;
+  }
+
+  // Drop only the first column name
+  const headers = (columnNames ?? data[0]).slice(1);
+
+  // Build CSV lines
+  const csvLines = [
+    headers.map(formatCell).join(','),            
+    ...data.map(row => row.map(formatCell).join(','))
+  ];
+
+  return csvLines.join('\n');
 }
 
 /**

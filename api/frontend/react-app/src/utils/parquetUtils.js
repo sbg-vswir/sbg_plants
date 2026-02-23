@@ -5,28 +5,30 @@
 import { parquetRead } from 'hyparquet';
 
 export async function parseParquetData(arrayBuffer, columnNames) {
-  try {
-    // console.log('Parsing Parquet, buffer size:', arrayBuffer.byteLength);
-    
+  try {    
     const rows = [];
     
     await parquetRead({
       file: arrayBuffer,
       onComplete: (data) => {
-        data.forEach(row => rows.push(row));
+        data.forEach(row => {
+          const converted = row.map(val => {
+            if (typeof val === 'bigint') return Number(val);
+            if (Array.isArray(val)) return val.map(v => typeof v === 'bigint' ? Number(v) : v);
+            // strip embedded quotes from strings at parse time
+            if (typeof val === 'string') return val.replace(/^"+|"+$/g, '');
+            return val;
+          });
+          rows.push(converted);
+        });
       }
-    });
+    }); 
     
-    // console.log('Parquet parsed successfully. Rows:', rows.length);
+    console.log('Parquet parsed successfully. Rows:', rows.length);
     const geomIndex = columnNames ? columnNames.indexOf('geom') : -1;
     let geojson = null;
     const hasGeometry = rows.length > 0 && geomIndex > -1 && rows[0][geomIndex] !== undefined && rows[0][geomIndex] !== null;
 
-    // // Process geometry
-    // let geojson = null;
-    // console.log(rows.length > 0 && rows[0].geom !== undefined && rows[0].geom !== null)
-    // const hasGeometry = rows.length > 0 && rows[0].geom !== undefined && rows[0].geom !== null;
-    // console.log(hasGeometry);
     if (hasGeometry) {
       geojson = createGeoJSON(rows, columnNames, geomIndex);
     }
