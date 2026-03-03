@@ -6,7 +6,8 @@ import {
   Button,
   Box,
   Stack,
-  Chip
+  Chip,
+  Autocomplete
 } from '@mui/material';
 import {
   FilterAlt as FilterIcon,
@@ -14,6 +15,9 @@ import {
   Science as ScienceIcon,
   Download as DownloadIcon
 } from '@mui/icons-material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+
+import * as ENUMS from '../enums';
 
 const PAGE_SIZE = 100;
 
@@ -30,7 +34,8 @@ function FilterSection({
   loading,
   nextDisabled,
   extractDisabled,
-  downloadTableDisabled
+  downloadTableDisabled,
+  isIsoFitMode
 }) {
   return (
     <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
@@ -41,18 +46,48 @@ function FilterSection({
       
       {/* Filter Inputs */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 2, mb: 3 }}>
-        {filters.map(filter => (
-          <TextField
-            key={filter.id}
-            label={filter.label}
-            type={filter.type}
-            placeholder={filter.placeholder}
-            value={filterValues[filter.id] || ''}
-            onChange={(e) => onFilterChange(filter.id, e.target.value)}
-            size="small"
-            fullWidth
-          />
-        ))}
+        {filters.map(filter => {
+          const options = ENUMS[filter.id]; // taxa, veg_or_cover_type, etc.
+          if (filter.type === 'date') {
+            return (
+                <DatePicker
+                  key={filter.id}
+                  label={filter.label}
+                  value={filterValues[filter.id] || null}
+                  onChange={(newValue) => onFilterChange(filter.id, newValue)}
+                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                />
+            );
+          }
+          else if (filter.type === 'enum' && options) {
+            return (
+              <Autocomplete
+                key={filter.id}
+                options={options}
+                value={filterValues[filter.id] || null}
+                onChange={(e, newValue) => onFilterChange(filter.id, newValue)}
+                renderInput={(params) => (
+                  <TextField {...params} label={filter.label} placeholder={filter.placeholder} size="small" />
+                )}
+                freeSolo
+                fullWidth
+              />
+            );
+          } else {
+            return (
+              <TextField
+                key={filter.id}
+                label={filter.label}
+                type={filter.type}
+                placeholder={filter.placeholder}
+                value={filterValues[filter.id] || ''}
+                onChange={(e) => onFilterChange(filter.id, e.target.value)}
+                size="small"
+                fullWidth
+              />
+            );
+          }
+        })}
       </Box>
 
       {/* GeoJSON Upload */}
@@ -98,11 +133,16 @@ function FilterSection({
         <Button
           variant="contained"
           color="secondary"
-          // startIcon={<ScienceIcon />}
-          onClick={onExtractSpectra}
+          onClick={() => {
+            if (isIsoFitMode) {
+              const ok = window.confirm('Are you sure you want to run ISOFIT?');
+              if (!ok) return;
+            }
+            onExtractSpectra();
+          }}
           disabled={extractDisabled || loading}
         >
-          Extract Spectra
+          {isIsoFitMode ? 'Run ISOFIT' : 'Extract Spectra'}
         </Button>
         <Button
           variant="outlined"

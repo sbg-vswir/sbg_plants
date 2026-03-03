@@ -23,20 +23,38 @@ STRING_FIELDS = {
     "plot_veg_type",
     "subplot_cover_method",
     "floristic_survey",
-    "plot_method"
+    "plot_method",
+    "elevation_source"
 }
 
 # Numeric fields that support single values, lists, or ranges
 NUMERIC_FIELDS = {
+    "plot_id",
     "value",
     "error",
     "sample_fc_percent",
-    "pixel_id"
+    "pixel_id",
+    "lon",
+    "lat",
+    "elevation",
+    "path_length",
+    "to_sensor_azimuth",
+    "to_sensor_zenith",
+    "to_sun_azimuth",
+    "to_sun_zenith",
+    "solar_phase",
+    "slope",
+    "aspect",
+    "cosine_i", 
+    "utc_time",
+    "glt_row",
+    "glt_column"
 }
 
 # Boolean fields
 BOOLEAN_FIELDS = {
-    "floristic_survey"
+    "floristic_survey",
+    "shade_mask"
 }
 
 # Date fields
@@ -97,7 +115,31 @@ VIEW_FIELD_CONFIG = {
     },
     "extracted_spectra_view": {
         "allowed_fields": {
-            "pixel_id"
+            "pixel_id", 
+            "radiance",
+            "lon",
+            "lat",
+            "elevation",
+            "path_length",
+            "to_sensor_azimuth",
+            "to_sensor_zenith",
+            "to_sun_azimuth",
+            "to_sun_zenith",
+            "solar_phase",
+            "slope",
+            "aspect",
+            "cosine_i", 
+            "utc_time",
+            "granule_id"
         }
+    },
+    "extracted_metadata_view": {
+        "allowed_fields": {
+            "campaign_name",
+            "sensor_name",
+            "elevation_source",
+            "wavelength_center",
+            "fwhm"
+        }   
     }
 }

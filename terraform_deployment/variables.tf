@@ -59,3 +59,12 @@ variable "spa_domain" {
   description = "Full domain of the SPA (used for callback and logout URLs)"
   type        = string
 }
+variable "isofit_user_password" {
+  description = "password for isofit user"
+  type        = string
+}
+
+variable "isofit_user" {
+  description = "username for isofit user"
+  type        = string
+}

@@ -35,6 +35,28 @@ SELECTABLE_COLUMNS = {
         'geom'
     ],
     "extracted_spectra_view": [
-        'pixel_id'
+        'pixel_id', 
+        'radiance',
+        'lon',
+        'lat',
+        'elevation',
+        'path_length',
+        'to_sensor_azimuth',
+        'to_sensor_zenith',
+        'to_sun_azimuth',
+        'to_sun_zenith',
+        'solar_phase',
+        'slope',
+        'aspect',
+        'cosine_i', 
+        'utc_time',
+        'granule_id'
+    ],
+    "extracted_metadata_view": [
+        'campaign_name',
+        'sensor_name',
+        'elevation_source',
+        'wavelength_center',
+        'fwhm'
     ]
 }

@@ -10,6 +10,8 @@ terraform_state_bucket/
 .env.local
 *.zip
 __pycache__
+tunnel.sh
+isofit/
 
 # Dependencies
 node_modules/

@@ -160,7 +160,7 @@ CREATE TYPE vswir_plants."VEGETATION_type" AS ENUM (
    'Meadow',
    'Shrub',
    'Tree',
-   'Grassland'
+   'Grassland',
    'Not recorded'
 ); 
 

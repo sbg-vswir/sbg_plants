@@ -14,7 +14,9 @@
     "react-dom": "^18.2.0",
     "react-leaflet": "^4.2.1",
     "leaflet": "^1.9.4",
-    "hyparquet": "^1.0.0"
+    "hyparquet": "^1.0.0",
+    "@mui/x-date-pickers": "^6.0.0",
+    "date-fns": "^2.30.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",

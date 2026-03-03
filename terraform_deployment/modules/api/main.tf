@@ -16,11 +16,14 @@ resource "aws_iam_role" "lambda_exec" {
       }
     ]
   })
+
+  tags = var.tags
 }
 
 resource "aws_secretsmanager_secret" "pygeoapi_db" {
   name        = "pygeoapi_db_credentials"
   description = "Database credentials for pygeoapi Lambda"
+  tags = var.tags
 }
 
 resource "aws_secretsmanager_secret_version" "pygeoapi_db_version" {
@@ -32,6 +35,7 @@ resource "aws_secretsmanager_secret_version" "pygeoapi_db_version" {
     dbname   = var.db_name
     port     = var.db_port
   })
+  
 }
 
 
@@ -51,6 +55,8 @@ resource "aws_iam_policy" "lambda_secrets_policy" {
       }
     ]
   })
+  
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_secrets_attach" {
@@ -89,13 +95,13 @@ resource "aws_iam_policy" "lambda_sqs_send_policy" {
       }
     ]
   })
+
+  tags = var.tags
 }
 resource "aws_iam_role_policy_attachment" "lambda_sqs_send_attach" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = aws_iam_policy.lambda_sqs_send_policy.arn
 }
-
-
 
 resource "aws_security_group" "lambda_sg" {
   name        = "lambda-sg"
@@ -118,8 +124,9 @@ resource "aws_security_group" "lambda_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
 
+  tags = var.tags
+}
 
 resource "aws_vpc_endpoint" "secretsmanager" {
   vpc_id            = var.vpc_id
@@ -131,6 +138,8 @@ resource "aws_vpc_endpoint" "secretsmanager" {
 
   security_group_ids = [aws_security_group.lambda_sg.id]
   subnet_ids        = var.public_subnet_ids
+  
+  tags = var.tags
 }
 
 resource "aws_vpc_endpoint" "dynamodb" {
@@ -139,6 +148,8 @@ resource "aws_vpc_endpoint" "dynamodb" {
   vpc_endpoint_type = "Gateway"
 
   route_table_ids = var.route_table_ids
+
+  tags = var.tags
 }
 
 
@@ -166,6 +177,8 @@ resource "aws_lambda_function" "pygeoapi" {
 
   timeout = 60  # seconds 900 max
   memory_size = 1024 * 2 # 1GB memory
+
+  tags = var.tags
 }
 
 # -----------------------------
@@ -194,6 +207,8 @@ resource "aws_apigatewayv2_api" "pygeoapi" {
     ]
     max_age = 3600
   }
+
+  tags = var.tags
 }
 
 # Lambda integration
@@ -233,6 +248,7 @@ resource "aws_lambda_permission" "apigw" {
 
 resource "aws_s3_bucket" "pygeoapi_config" {
   bucket = "pygeoapi-config"
+  tags = var.tags
 }
 
 resource "aws_s3_bucket_public_access_block" "pygeoapi_config" {
@@ -242,6 +258,7 @@ resource "aws_s3_bucket_public_access_block" "pygeoapi_config" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+  
 }
 
 resource "aws_s3_bucket_versioning" "pygeoapi_config" {
@@ -271,13 +288,14 @@ resource "aws_iam_policy" "lambda_pygeoapi_s3_read" {
       {
         Effect = "Allow"
         Action = [
-          "*"
-          #"s3:GetObject"
+          # "*"
+          "s3:GetObject"
         ]
         Resource = [aws_s3_bucket.pygeoapi_config.arn, "${aws_s3_bucket.pygeoapi_config.arn}/*"]
       }
     ]
   })
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_pygeoapi_s3_attach" {
@@ -304,6 +322,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "pygeoapi_exports" {
 
 resource "aws_sqs_queue" "export_dlq" {
   name = "${var.name}-export-dlq"
+  tags = var.tags
 }
 
 resource "aws_sqs_queue" "export_queue" {
@@ -315,6 +334,8 @@ resource "aws_sqs_queue" "export_queue" {
     deadLetterTargetArn = aws_sqs_queue.export_dlq.arn
     maxReceiveCount     = 3
   })
+
+  tags = var.tags
 }
 
 resource "aws_vpc_endpoint" "sqs" {
@@ -324,6 +345,8 @@ resource "aws_vpc_endpoint" "sqs" {
   subnet_ids = var.public_subnet_ids          
   security_group_ids = [aws_security_group.lambda_sg.id]
   private_dns_enabled = true
+
+  tags = var.tags
 }
 
 
@@ -336,6 +359,17 @@ resource "aws_dynamodb_table" "export_jobs" {
     name = "job_id"
     type = "S"
   }
+  attribute {
+    name = "parent_job_id"
+    type = "S"
+  }
+  global_secondary_index {
+    name            = "parent_job_id-index"
+    hash_key        = "parent_job_id"
+    projection_type = "ALL"
+  }
+
+  tags = var.tags
 }
 
 resource "aws_iam_role" "worker_lambda_role" {
@@ -351,6 +385,8 @@ resource "aws_iam_role" "worker_lambda_role" {
       }
     ]
   })
+
+  tags = var.tags
 }
 
 data "aws_iam_policy_document" "worker_lambda_policy_doc" {
@@ -365,27 +401,28 @@ data "aws_iam_policy_document" "worker_lambda_policy_doc" {
 
   statement {
     actions   = [
-      "*"
-      # "s3:PutObject",
-      # "s3:PutObjectAcl",
-      # "s3:GetObject",
-      # "s3:ListBucket", 
-      # "s3:AbortMultipartUpload", 
-      # "s3:ListMultipartUploadParts",     
-      # "s3:ListBucketMultipartUploads" 
+      # "*"
+      "s3:PutObject",
+      "s3:PutObjectAcl",
+      "s3:GetObject",
+      "s3:ListBucket", 
+      "s3:AbortMultipartUpload", 
+      "s3:ListMultipartUploadParts",     
+      "s3:ListBucketMultipartUploads" 
     ]
     resources = ["arn:aws:s3:::pygeoapi-config/*"]
   }
 
   statement {
     actions   = [ 
-      "*"
-      # "dynamodb:PutItem",
-      # "dynamodb:UpdateItem",
-      # "dynamodb:GetItem"
+      # "*"
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:GetItem"
     ]
     resources = [aws_dynamodb_table.export_jobs.arn]
   }
+  
 }
 
 
@@ -436,14 +473,17 @@ resource "aws_lambda_function" "worker_lambda" {
 
   timeout     = 900
   memory_size = 1024 * 3
-}
 
+  tags = var.tags
+}
 
 resource "aws_lambda_event_source_mapping" "worker_sqs_trigger" {
   event_source_arn  = aws_sqs_queue.export_queue.arn
   function_name     = aws_lambda_function.worker_lambda.arn
   batch_size        = 1
   enabled           = true
+
+  tags = var.tags
 }
 
 
@@ -461,6 +501,8 @@ resource "aws_iam_role" "job_status_lambda_role" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
+
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy" "job_status_lambda_policy" {
@@ -521,6 +563,8 @@ resource "aws_lambda_function" "job_status" {
       JOB_TABLE   = aws_dynamodb_table.export_jobs.name
     }
   }
+
+  tags = var.tags
 }
 
 # -----------------------------

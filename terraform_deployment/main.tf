@@ -43,6 +43,7 @@ module "api" {
   db_user_password = var.db_user_password
   db_host_url = module.rds.db_instance_endpoint
   region = var.region
+  tags    = var.tags
 }
 
 module "cognito" {

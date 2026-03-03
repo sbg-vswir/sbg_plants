@@ -13,13 +13,14 @@ queue_url = os.environ['SQS_QUEUE_URL']
 region = os.environ['AWS_REGION']
 sqs = boto3.client("sqs", region_name=region)
 
-def send_sqs(sql, params, debug=False):
+def send_sqs(sql, params, metadata=None, debug=False):
     job_id = str(uuid.uuid4())
     
     message_body = {
         "job_id": job_id,
         "sql_query": sql,
         "params": params,
+        "spectral_metadata": metadata,
         "debug": debug
     }
 

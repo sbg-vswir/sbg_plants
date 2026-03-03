@@ -117,7 +117,9 @@ def lambda_handler(event, context):
     
     if ASYNC_VIEWS[view_name]:
         try:
-            job_id = send_sqs(sql, params, debug)
+
+            spectral_metadata = query_params.get("metadata")
+            job_id = send_sqs(sql, params, spectral_metadata, debug)
         except Exception as e:
             logger.exception("sqs error")
             return {"statusCode": 500, "body": json.dumps({"error": f"Database error: {str(e)}"})}

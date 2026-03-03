@@ -6,18 +6,20 @@ from app.filter import build_where_clause
 
 logger = logging.getLogger("lambda_handler")
 
-ALLOWED_VIEWS = ["plot_pixels_mv", "leaf_traits_view", "extracted_spectra_view"]
+ALLOWED_VIEWS = ["plot_pixels_mv", "leaf_traits_view", "extracted_spectra_view", "extracted_metadata_view"]
 
 VIEW_MAP = {
     "plot_pixels_mv": True,
     "leaf_traits_view": True,
-    "extracted_spectra_view": False
+    "extracted_spectra_view": False,
+    "extracted_metadata_view": False
 }
 
 ASYNC_VIEWS = {
     "plot_pixels_mv": False,
     "leaf_traits_view": False,
-    "extracted_spectra_view": True
+    "extracted_spectra_view": True,
+    "extracted_metadata_view": False
 }
 
 

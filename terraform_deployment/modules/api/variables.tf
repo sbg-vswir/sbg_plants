@@ -46,3 +46,7 @@ variable "region" {
 variable "worker_lambda_url" {
     type  = string
 }
+
+variable "tags" {
+    type  = map(string)
+}

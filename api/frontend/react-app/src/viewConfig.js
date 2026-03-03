@@ -16,7 +16,7 @@ export const VIEW_CONFIGS = {
       {
         id: "sensor_name",
         label: "Sensor Name:",
-        type: "text",
+        type: "enum",
         placeholder: "e.g., NEON AIS 1"
       },
       {
@@ -28,13 +28,13 @@ export const VIEW_CONFIGS = {
       {
         id: "start_date",
         label: "Start Date:",
-        type: "text",
+        type: "date",
         placeholder: "YYYY-MM-DD"
       },
       {
         id: "end_date",
         label: "End Date:",
-        type: "text",
+        type: "date",
         placeholder: "YYYY-MM-DD"
       }
     ]
@@ -66,58 +66,88 @@ export const VIEW_CONFIGS = {
         type: "text",
         placeholder: "e.g., 021-ER18_Salixwolfii"
       },
-      {
-        id: "collection_date",
-        label: "Collection Date:",
-        type: "text",
-        placeholder: "YYYY-MM-DD"
-      },
+      // {
+      //   id: "collection_date",
+      //   label: "Collection Date:",
+      //   type: "text",
+      //   placeholder: "YYYY-MM-DD"
+      // },
       {
         id: "trait",
         label: "Trait:",
-        type: "text",
-        placeholder: "e.g., LMA, Chl"
+        type: "enum",
+        placeholder: ""
       },
       {
         id: "taxa",
         label: "Taxa:",
-        type: "text",
-        placeholder: "e.g., Acomastylis rossii"
+        type: "enum",
+        placeholder: ""
       },
       {
         id: "veg_or_cover_type",
         label: "Vegetation/Cover Type:",
-        type: "text",
-        placeholder: "e.g., Grass, Woody individual"
+        type: "enum",
+        placeholder: ""
       },
       {
         id: "phenophase",
         label: "Phenophase:",
-        type: "text",
-        placeholder: "e.g., Leaves fully expanded"
+        type: "enum",
+        placeholder: ""
       },
       {
         id: "plant_status",
         label: "Plant Status:",
-        type: "text",
-        placeholder: "e.g., Flowering, Fruiting"
+        type: "enum",
+        placeholder: ""
       },
       {
         id: "plot_veg_type",
         label: "Plot Vegetation Type:",
-        type: "text",
-        placeholder: "e.g., Meadow, Grassland"
+        type: "enum",
+        placeholder: ""
+      },
+      {
+        id: "subplot_cover_method",
+        label: "Subplot Cover Method:",
+        type: "enum",
+        placeholder: ""
+      },
+      {
+        id: "sample_fc_class",
+        label: "Fractional Class:",
+        type: "enum",
+        placeholder: ""
+      },
+      {
+        id: "handling",
+        label: "Sample Handling:",
+        type: "enum",
+        placeholder: ""
+      },
+      {
+        id: "plot_method",
+        label: "Plot Method:",
+        type: "enum",
+        placeholder: ""
+      },
+      {
+        id: "method",
+        label: "Trait Method:",
+        type: "enum",
+        placeholder: ""
       },
       {
         id: "start_date",
         label: "Start Date:",
-        type: "text",
+        type: "date",
         placeholder: "YYYY-MM-DD"
       },
       {
         id: "end_date",
         label: "End Date:",
-        type: "text",
+        type: "date",
         placeholder: "YYYY-MM-DD"
       }
     ]
@@ -163,5 +193,10 @@ export const SELECT_CONFIGS = {
 
   "extracted_spectra_view": [
     "pixel_id"
+  ],
+
+   "extracted_metadata_view": [
+    "wavelength_center",
+    "fwhm"
   ]
 };

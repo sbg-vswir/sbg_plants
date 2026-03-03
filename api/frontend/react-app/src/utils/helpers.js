@@ -122,21 +122,36 @@ export function convertToCSV(data, columnNames) {
  * Extract pixel IDs from data
  */
 export function extractPixelIds(data, columnNames) {
-  const pixelIds = new Set();
-  const pixelIdsIndex = columnNames.indexOf('pixel_ids');
-  
-  if (pixelIdsIndex === -1) return [];
-  
+  const pixelIdsIndex     = columnNames.indexOf('pixel_ids');
+  const sensorNameIndex   = columnNames.indexOf('sensor_name');
+  const campaignNameIndex = columnNames.indexOf('campaign_name');
+
+  if (pixelIdsIndex === -1) return {};
+
+  const grouped = {};
+
   data.forEach(row => {
-    const pixelIdsArray = row[pixelIdsIndex];
-    if (pixelIdsArray && Array.isArray(pixelIdsArray)) {
-      pixelIdsArray.forEach(id => {
-        // Convert BigInt to Number
-        const numericId = typeof id === 'bigint' ? Number(id) : id;
-        pixelIds.add(numericId);
-      });
+    const pixelIdsArray  = row[pixelIdsIndex];
+    const sensorName     = row[sensorNameIndex];
+    const campaignName   = row[campaignNameIndex];
+
+    if (!pixelIdsArray || !Array.isArray(pixelIdsArray)) return;
+
+    const key = `${campaignName}|${sensorName}`;
+
+    if (!grouped[key]) {
+      grouped[key] = new Set();
     }
+
+    pixelIdsArray.forEach(id => {
+      grouped[key].add(typeof id === 'bigint' ? Number(id) : id);
+    });
   });
-  
-  return [...pixelIds].sort((a, b) => a - b);
+
+  const result = {};
+  for (const [key, ids] of Object.entries(grouped)) {
+    result[key] = [...ids].sort((a, b) => a - b);
+  }
+
+  return result;
 }

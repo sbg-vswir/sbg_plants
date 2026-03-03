@@ -24,7 +24,7 @@ export async function parseParquetData(arrayBuffer, columnNames) {
       }
     }); 
     
-    console.log('Parquet parsed successfully. Rows:', rows.length);
+    // console.log('Parquet parsed successfully. Rows:', rows.length);
     const geomIndex = columnNames ? columnNames.indexOf('geom') : -1;
     let geojson = null;
     const hasGeometry = rows.length > 0 && geomIndex > -1 && rows[0][geomIndex] !== undefined && rows[0][geomIndex] !== null;

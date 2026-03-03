@@ -13,6 +13,38 @@ logger.setLevel(logging.DEBUG)
 s3 = boto3.client("s3")
 dynamodb = boto3.client("dynamodb", region_name="us-west-2")
 
+def build_spectral_csv(rows, col_descriptions, spectral_metadata):
+    campaign_name = spectral_metadata["campaign_name"]
+    sensor_name = spectral_metadata["sensor_name"]
+    wavelength_center = spectral_metadata["wavelength_center"]
+    fwhm = spectral_metadata["fwhm"]
+
+    # Get pixel_id index from cursor description
+    col_names = [desc[0] for desc in col_descriptions]
+    pixel_id_idx = col_names.index("pixel_id")
+    radiance_idx = col_names.index("radiance")  # adjust to your actual radiance column name
+
+    # Build MultiIndex columns
+    fixed_cols = [("campaign_name", ""), ("sensor_name", ""), ("pixel_id", "")]
+    spectral_cols = list(zip(wavelength_center, fwhm))
+    multi_index = pd.MultiIndex.from_tuples(fixed_cols + spectral_cols)
+
+    data = []
+    for row in rows:
+        pixel_id = row[pixel_id_idx]
+        radiance = row[radiance_idx]  # assumed to be an N-length array
+        data.append([campaign_name, sensor_name, pixel_id] + list(radiance))
+
+    df = pd.DataFrame(data, columns=multi_index)
+    return df
+
+
+def chunk_to_csv(df, part_number):
+    buffer = io.StringIO()
+    df.to_csv(buffer, index=False, header=(part_number == 1))
+    buffer.seek(0)
+    return buffer
+
 def lambda_handler(event, context):
     bucket = os.environ['S3_BUCKET']
     job_table = os.environ['JOB_TABLE']
@@ -29,7 +61,14 @@ def lambda_handler(event, context):
             job_id = payload["job_id"]
             sql = payload["sql_query"]
             params = payload.get("params", [])
-            key = f"exports/{job_id}.csv"
+        
+            spectral_metadata = payload.get("spectral_metadata", None)
+            if spectral_metadata:
+                campaign_name = spectral_metadata["campaign_name"]
+                sensor_name = spectral_metadata["sensor_name"]
+                key = f"exports/{campaign_name}_{sensor_name}_{job_id}.csv"
+            else:
+                key = f"exports/{job_id}.csv"
 
             logger.debug("Processing job_id=%s, s3_key=%s", job_id, key)
 
@@ -57,10 +96,13 @@ def lambda_handler(event, context):
                         rows = cur.fetchmany(cur.itersize)
                         if not rows:
                             break
-                        chunk = pd.DataFrame(rows, columns=[desc[0] for desc in cur.description])
 
-                        buffer = io.StringIO()
-                        chunk.to_csv(buffer, index=False, header=(part_number==1))
+                        if spectral_metadata:
+                            chunk = build_spectral_csv(rows, cur.description, spectral_metadata)
+                        else:
+                            chunk = pd.DataFrame(rows, columns=[desc[0] for desc in cur.description])
+
+                        buffer = chunk_to_csv(chunk, part_number)
 
                         buffer.seek(0)
                         logger.debug("Uploading part %d", part_number)
