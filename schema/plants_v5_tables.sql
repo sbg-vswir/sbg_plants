@@ -163,6 +163,7 @@ CREATE TABLE vswir_plants.sample (
     sample_fc_class vswir_plants."FRACTIONAL_class" NOT NULL,
     sample_fc_percent INTEGER NOT NULL,
     plant_status vswir_plants."PLANT_status" NOT NULL,
+    canopy_position vswir_plants."CANOPY_position" NOT NULL,
     CONSTRAINT sample_collection_date_plot_id_fkey FOREIGN KEY (plot_id, collection_date)
         REFERENCES vswir_plants.insitu_plot_event (plot_id, collection_date)
         ON DELETE CASCADE,

@@ -194,7 +194,7 @@ CREATE TYPE vswir_plants."CLOUD_type" AS ENUM (
     'Cumulus / Clear', 
     'Cirrus / Clear', 
     'Complete stratus cover',
-    'Not Collected'
+    'Not collected'
 ); 
 
 CREATE TYPE vswir_plants."Error_type" AS ENUM (
@@ -291,4 +291,12 @@ CREATE TYPE vswir_plants."Trait_units" AS ENUM (
     'grams dry mass per g m2',
     'concentration in percent dry mass',
     'concentration in ppm'
+);
+
+CREATE TYPE vswir_plants."CANOPY_position" AS ENUM (
+    "Partially shaded", 
+    "Full sun", 
+    "Mostly shaded", 
+    "Open grown", 
+    "Not recorded"
 );
