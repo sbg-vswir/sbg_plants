@@ -7,8 +7,8 @@ import geopandas as gpd
 import shapely.wkt
 import shapely.geometry
 
-from app.query import ALLOWED_VIEWS, ASYNC_VIEWS, execute_query, build_query
-from app.select_config import SELECTABLE_COLUMNS
+from app.query import execute_query, build_query
+from app.view_config import VIEW_CONFIG, get_selectable_columns
 from app.sqs import send_sqs
 
 
@@ -48,7 +48,7 @@ def lambda_handler(event, context):
         logger.debug("Missing view_name in request")
         return {"statusCode": 400, "body": json.dumps({"error": "Missing view_name"})}
 
-    if view_name not in ALLOWED_VIEWS:
+    if view_name not in VIEW_CONFIG:
         logger.debug("View not allowed: %s", view_name)
         return {"statusCode": 400, "body": json.dumps({"error": "View not allowed"})}
 
@@ -83,7 +83,7 @@ def lambda_handler(event, context):
             select = [select]
 
         # Validate columns using set operation
-        invalid_cols = set(select) - set(SELECTABLE_COLUMNS[view_name])
+        invalid_cols = set(select) - set(get_selectable_columns(view_name))
         if invalid_cols:
             return {
                 "statusCode": 400,
@@ -115,7 +115,7 @@ def lambda_handler(event, context):
         logger.exception("Database error")
         return {"statusCode": 500, "body": json.dumps({"error": f"Database error: {str(e)}"})}
     
-    if ASYNC_VIEWS[view_name]:
+    if VIEW_CONFIG[view_name]["is_async"]:
         try:
 
             spectral_metadata = query_params.get("metadata")

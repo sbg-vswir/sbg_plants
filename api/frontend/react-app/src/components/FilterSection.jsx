@@ -1,41 +1,31 @@
 import React from 'react';
 import {
-  Paper,
-  Typography,
-  TextField,
-  Button,
-  Box,
-  Stack,
-  Chip,
-  Autocomplete
+  Paper, Typography, TextField, Button, Box, Stack, Chip, Autocomplete
 } from '@mui/material';
 import {
   FilterAlt as FilterIcon,
   NavigateNext as NextIcon,
-  Science as ScienceIcon,
   Download as DownloadIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-
-import * as ENUMS from '../enums';
-
-const PAGE_SIZE = 100;
 
 function FilterSection({
   filters,
   filterValues,
   onFilterChange,
   geojsonFile,
+  geojsonKey,
   onGeojsonUpload,
   onApplyFilters,
   onNext,
+  pageSize,
   onExtractSpectra,
   onDownloadTable,
   loading,
   nextDisabled,
   extractDisabled,
   downloadTableDisabled,
-  isIsoFitMode
+  extractLabel = 'Extract Spectra',
 }) {
   return (
     <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
@@ -47,7 +37,6 @@ function FilterSection({
       {/* Filter Inputs */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 2, mb: 3 }}>
         {filters.map(filter => {
-          const options = ENUMS[filter.id]; // taxa, veg_or_cover_type, etc.
           if (filter.type === 'date') {
             return (
                 <DatePicker
@@ -59,15 +48,15 @@ function FilterSection({
                 />
             );
           }
-          else if (filter.type === 'enum' && options) {
+          else if (filter.type === 'enum' && filter.options) {
             return (
               <Autocomplete
                 key={filter.id}
-                options={options}
+                options={filter.options}
                 value={filterValues[filter.id] || null}
                 onChange={(e, newValue) => onFilterChange(filter.id, newValue)}
                 renderInput={(params) => (
-                  <TextField {...params} label={filter.label} placeholder={filter.placeholder} size="small" />
+                  <TextField {...params} label={filter.label} size="small" />
                 )}
                 freeSolo
                 fullWidth
@@ -96,6 +85,7 @@ function FilterSection({
           Upload GeoJSON (optional)
         </Typography>
         <input
+          key={geojsonKey}
           type="file"
           accept=".geojson,.json"
           onChange={onGeojsonUpload}
@@ -113,7 +103,7 @@ function FilterSection({
       </Box>
 
       {/* Action Buttons */}
-      <Stack direction="row" spacing={2} flexWrap="wrap">
+      <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ rowGap: 1.5 }}>
         <Button
           variant="contained"
           startIcon={<FilterIcon />}
@@ -128,21 +118,15 @@ function FilterSection({
           onClick={onNext}
           disabled={nextDisabled || loading}
         >
-          Next {PAGE_SIZE}
+          Next {pageSize}
         </Button>
         <Button
           variant="contained"
           color="secondary"
-          onClick={() => {
-            if (isIsoFitMode) {
-              const ok = window.confirm('Are you sure you want to run ISOFIT?');
-              if (!ok) return;
-            }
-            onExtractSpectra();
-          }}
+          onClick={onExtractSpectra}
           disabled={extractDisabled || loading}
         >
-          {isIsoFitMode ? 'Run ISOFIT' : 'Extract Spectra'}
+          {extractLabel}
         </Button>
         <Button
           variant="outlined"

@@ -5,9 +5,10 @@ export function useIsAdmin() {
   const tokens = getStoredTokens();
   const user = getUserFromTokens(tokens);
   const raw = user?.['cognito:groups'] ?? [];
-  // Cognito puts groups as an array in the decoded JWT
   const groups = Array.isArray(raw) ? raw : [raw];
-  
+
+  console.log('[useIsAdmin] groups:', groups);
+
   return {
     isAdmin: groups.includes('admins') || groups.includes('superadmins'),
     isSuperAdmin: groups.includes('superadmins'),

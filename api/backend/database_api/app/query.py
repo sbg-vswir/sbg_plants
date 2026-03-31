@@ -3,85 +3,57 @@ import pandas as pd
 import geopandas as gpd
 from app.db import get_connection
 from app.filter import build_where_clause
+from app.view_config import VIEW_CONFIG
 
 logger = logging.getLogger("lambda_handler")
 
-ALLOWED_VIEWS = ["plot_pixels_mv", "leaf_traits_view", "extracted_spectra_view", "extracted_metadata_view"]
 
-VIEW_MAP = {
-    "plot_pixels_mv": True,
-    "leaf_traits_view": True,
-    "extracted_spectra_view": False,
-    "extracted_metadata_view": False
-}
-
-ASYNC_VIEWS = {
-    "plot_pixels_mv": False,
-    "leaf_traits_view": False,
-    "extracted_spectra_view": True,
-    "extracted_metadata_view": False
-}
-
-
-def build_query(view_name: str, select_statement:str,  limit: int = None, offset: int = 0,  filters: dict = None):
-    """
-    Query a whitelisted view and return a pandas or geopandas DataFrame.
-    Automatically returns GeoDataFrame if 'geom' column is present.
-    Logging occurs only if debug=True.
-
-    Parameters:
-    - view_name: str, name of the whitelisted view
-    - limit: int, optional max number of rows
-    - filters: dict, optional column -> value mapping for filtering
-    - debug: bool, enable debug logging
-
-    Returns:
-    - pd.DataFrame or gpd.GeoDataFrame
-    """
-
-    if view_name not in ALLOWED_VIEWS:
+def build_query(view_name: str, select_statement: str, limit: int = None, offset: int = 0, filters: dict = None):
+    if view_name not in VIEW_CONFIG:
         raise ValueError(f"View '{view_name}' is not allowed.")
 
-    # --- Build SQL query ---
     sql = f'SELECT {select_statement} FROM "{view_name}"'
     params = []
 
-    # --- WHERE clause ---
     if filters:
         where_clause, where_params = build_where_clause(view_name, filters)
         sql += where_clause
-        # Flatten tuple/list for GeoPandas / pandas
         if isinstance(where_params, (tuple, list)):
             params.extend(where_params)
         else:
             params.append(where_params)
 
-    # --- LIMIT clause ---
     if limit:
         sql += " LIMIT %s"
         params.append(int(limit))
-        
-    # --- OFFSET clause ---
+
     if offset:
         sql += " OFFSET %s"
         params.append(int(offset))
-    
+
     logger.debug("Built query for view: %s", view_name)
     logger.debug("SQL: %s", sql)
     logger.debug("Params: %s", params)
-    
+
     return sql, params
+
 
 def execute_query(view_name: str, sql: str, params: list, debug: bool = False):
     logger.debug("Executing query on view: %s", view_name)
     logger.debug("SQL: %s", sql)
     logger.debug("Params: %s", params)
-    logger.debug("Returning GeoDataFrame: %s", VIEW_MAP.get(view_name, False))
 
-    # --- Execute query ---
+    has_geo = VIEW_CONFIG[view_name]["has_geo"]
+    logger.debug("Returning GeoDataFrame: %s", has_geo)
+
     with get_connection() as conn:
-        if VIEW_MAP.get(view_name, False):
-            df = gpd.read_postgis(sql, conn, geom_col="geom", params=params)
+        if has_geo:
+            try:
+                df = gpd.read_postgis(sql, conn, geom_col="geom", params=params)
+            except ValueError:
+                # geopandas raises ValueError on empty result sets with no geometry
+                # to infer the CRS from — fall back to a plain DataFrame
+                df = pd.read_sql(sql, conn, params=params)
         else:
             df = pd.read_sql(sql, conn, params=params)
 

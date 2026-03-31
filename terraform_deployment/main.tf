@@ -1,6 +1,6 @@
 module "network" {
 
-  source                 = "./modules/network"
+  source = "./modules/network"
 
   name                   = var.name
   region                 = var.region
@@ -12,68 +12,71 @@ module "network" {
 
 module "rds" {
 
-  source                 = "./modules/rds"
+  source = "./modules/rds"
 
-  vpc_id = module.network.vpc_id
-  vpc_cidr_block = var.vpc_cidr_block
+  vpc_id             = module.network.vpc_id
+  vpc_cidr_block     = var.vpc_cidr_block
   private_subnet_ids = module.network.subnet_private_ids
-  db_password = var.db_password
-  db_port = var.db_port
-  name = var.name
-  tags    = var.tags
-  db_name = var.db_name
+  db_password        = var.db_password
+  db_port            = var.db_port
+  name               = var.name
+  tags               = var.tags
+  db_name            = var.db_name
 
 
 }
 
 module "api" {
 
-  source                 = "./modules/api"
+  source = "./modules/api"
 
-  vpc_id             = module.network.vpc_id
+  vpc_id            = module.network.vpc_id
   public_subnet_ids = module.network.subnet_public_ids
-  name               = var.name
-  ecr_image_url      = var.ecr_image_url
-  worker_lambda_url   = var.worker_lambda_url
+  name              = var.name
+  ecr_image_url     = var.ecr_image_url
+  worker_lambda_url = var.worker_lambda_url
 
-  route_table_ids = module.network.vpc_route_table_ids
-  db_port = var.db_port
-  db_name = var.db_name
-  db_user = var.db_user
+  route_table_ids  = module.network.vpc_route_table_ids
+  db_port          = var.db_port
+  db_name          = var.db_name
+  db_user          = var.db_user
   db_user_password = var.db_user_password
-  db_host_url = module.rds.db_instance_endpoint
-  region = var.region
-  tags    = var.tags
+  db_host_url      = module.rds.db_instance_endpoint
+  region           = var.region
+  tags             = var.tags
+
+  cognito_user_pool_id = module.cognito.user_pool_id
+  cognito_client_id    = module.cognito.user_pool_client_id
 }
 
 module "cognito" {
 
-  source                 = "./modules/cognito"
+  source = "./modules/cognito"
 
   aws_region = var.region
   spa_domain = var.spa_domain
-  name = var.name
-  tags = var.tags
-  
+  name       = var.name
+  tags       = var.tags
+
 }
 
 module "frontend" {
 
-  source                 = "./modules/frontend"
-  aws_region = var.region
+  source        = "./modules/frontend"
+  aws_region    = var.region
   spa_subdomain = replace(var.spa_domain, "https://", "")
-  root_domain = replace(replace(var.spa_domain, "https://", ""), "plants.", "")
-  tags = var.tags
+  root_domain   = replace(replace(var.spa_domain, "https://", ""), "plants.", "")
+  tags          = var.tags
 }
 
 module "admin_backend" {
 
-  source                 = "./modules/admin_backend"
+  source = "./modules/admin_backend"
 
-  aws_region = var.region
-  api_id = module.api.api_id
-  cognito_user_pool_id = module.cognito.user_pool_id
-  cognito_client_id = module.cognito.user_pool_client_id
+  aws_region            = var.region
+  api_id                = module.api.api_id
+  cognito_user_pool_id  = module.cognito.user_pool_id
+  cognito_client_id     = module.cognito.user_pool_client_id
   cognito_user_pool_arn = module.cognito.user_pool_arn
-  api_execution_arn = module.api.api_execution_arn
+  api_execution_arn     = module.api.api_execution_arn
 }

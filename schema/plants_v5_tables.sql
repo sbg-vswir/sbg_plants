@@ -152,7 +152,6 @@ CREATE TABLE vswir_plants.insitu_plot_event (
 );
 
 
--- add canopy_position vswir.
 CREATE TABLE vswir_plants.sample (
     collection_date DATE NOT NULL, 
     plot_id INTEGER NOT NULL,

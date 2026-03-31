@@ -13,7 +13,6 @@ export async function fetchParquet(view, filters, limit = null, offset = 0) {
     format: 'parquet',
     select,
     offset,
-    debug: true
   };
 
   if (limit !== null && Number.isInteger(limit)) {
@@ -28,9 +27,28 @@ export async function fetchParquet(view, filters, limit = null, offset = 0) {
     payload.filters = validFilters;
   }
 
-  const response = await client.post(`/views/${view}`, payload, {
-    responseType: 'arraybuffer'  // replaces response.arrayBuffer()
-  });
+  let response;
+  try {
+    response = await client.post(`/views/${view}`, payload, {
+      responseType: 'arraybuffer'
+    });
+  } catch (err) {
+    // Axios puts the error response on err.response.
+    // Because we requested arraybuffer, the body is a raw buffer — decode it.
+    const raw = err.response?.data;
+    if (raw instanceof ArrayBuffer) {
+      try {
+        const text = new TextDecoder().decode(raw);
+        const json = JSON.parse(text);
+        const status = err.response.status;
+        if (status === 404) throw new Error('No data found for the selected filters.');
+        throw new Error(json.error || json.message || `Request failed (${status})`);
+      } catch (inner) {
+        if (inner.message) throw inner;
+      }
+    }
+    throw new Error(err.message || 'Request failed');
+  }
 
   return parseParquetData(response.data, select);
 }
@@ -54,7 +72,6 @@ export async function extractSpectra(pixelRangesBySensor) {
       const payload = {
         view: 'extracted_spectra_view',
         format: 'parquet',
-        debug: true,
         filters: { "pixel_id": pixelRanges },
         metadata: {
           campaign_name: campaign,
@@ -72,7 +89,7 @@ export async function extractSpectra(pixelRangesBySensor) {
   return Object.fromEntries(jobEntries);
 }
 
-export async function pollJobStatus(jobId, mode = 'individual') {
+export async function pollJobStatus(jobId, mode = 'single') {
   try {
     const response = await client.get(`/job_status/${jobId}`, {
       params: { mode }
@@ -80,10 +97,10 @@ export async function pollJobStatus(jobId, mode = 'individual') {
     return response.data;
   } catch (err) {
     if (err.response?.status === 404) {
-      if (mode === 'individual') return { status: 'queued', rowsProcessed: 0 };
-      else if (mode === 'summary') return {};
-      throw new Error('Error fetching job status');
+      if (mode === 'single') return { status: 'queued', rowsProcessed: 0 };
+      if (mode === 'summary') return {};
     }
+    throw new Error('Error fetching job status');
   }
 }
 
@@ -111,3 +128,38 @@ export async function submitIsofitRun(payload) {
     const response = await client.post(`/isofit_run`, payload, {responseType: 'json'});
     return response;
 }
+
+export async function listIsofitJobs(limit = 5) {
+  const response = await client.get('/isofit_jobs', { params: { limit } });
+  return response.data.jobs;
+}
+
+/**
+ * Ingestion API calls
+ */
+export const ingestApi = {
+  // Upload a bundle of 6 files — returns { batch_id }
+  submitBatch: (files) => {
+    const form = new FormData();
+    Object.entries(files).forEach(([key, file]) => form.append(key, file));
+    return client.post('/ingest', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
+
+  // List all batches for the current user
+  listBatches: () =>
+    client.get('/ingest').then(r => r.data),
+
+  // Get a single batch — includes qaqc_report
+  getBatch: (batchId) =>
+    client.get(`/ingest/${batchId}`).then(r => r.data),
+
+  // Approve a QAQC_PASS batch
+  approveBatch: (batchId) =>
+    client.post(`/ingest/${batchId}/approve`).then(r => r.data),
+
+  // Reject a batch
+  rejectBatch: (batchId) =>
+    client.post(`/ingest/${batchId}/reject`).then(r => r.data),
+};

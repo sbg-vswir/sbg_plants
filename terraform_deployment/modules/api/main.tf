@@ -8,8 +8,8 @@ resource "aws_iam_role" "lambda_exec" {
     Version = "2012-10-17"
     Statement = [
       {
-        Action    = "sts:AssumeRole"
-        Effect    = "Allow"
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
         Principal = {
           Service = "lambda.amazonaws.com"
         }
@@ -23,11 +23,11 @@ resource "aws_iam_role" "lambda_exec" {
 resource "aws_secretsmanager_secret" "pygeoapi_db" {
   name        = "pygeoapi_db_credentials"
   description = "Database credentials for pygeoapi Lambda"
-  tags = var.tags
+  tags        = var.tags
 }
 
 resource "aws_secretsmanager_secret_version" "pygeoapi_db_version" {
-  secret_id     = aws_secretsmanager_secret.pygeoapi_db.id
+  secret_id = aws_secretsmanager_secret.pygeoapi_db.id
   secret_string = jsonencode({
     username = var.db_user
     password = var.db_user_password
@@ -35,7 +35,7 @@ resource "aws_secretsmanager_secret_version" "pygeoapi_db_version" {
     dbname   = var.db_name
     port     = var.db_port
   })
-  
+
 }
 
 
@@ -46,8 +46,8 @@ resource "aws_iam_policy" "lambda_secrets_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
@@ -55,7 +55,7 @@ resource "aws_iam_policy" "lambda_secrets_policy" {
       }
     ]
   })
-  
+
   tags = var.tags
 }
 
@@ -137,14 +137,14 @@ resource "aws_vpc_endpoint" "secretsmanager" {
   private_dns_enabled = true
 
   security_group_ids = [aws_security_group.lambda_sg.id]
-  subnet_ids        = var.public_subnet_ids
-  
+  subnet_ids         = var.public_subnet_ids
+
   tags = var.tags
 }
 
 resource "aws_vpc_endpoint" "dynamodb" {
-  vpc_id       = var.vpc_id
-  service_name = "com.amazonaws.${var.region}.dynamodb"
+  vpc_id            = var.vpc_id
+  service_name      = "com.amazonaws.${var.region}.dynamodb"
   vpc_endpoint_type = "Gateway"
 
   route_table_ids = var.route_table_ids
@@ -175,7 +175,7 @@ resource "aws_lambda_function" "pygeoapi" {
     }
   }
 
-  timeout = 60  # seconds 900 max
+  timeout     = 60       # seconds 900 max
   memory_size = 1024 * 2 # 1GB memory
 
   tags = var.tags
@@ -187,9 +187,9 @@ resource "aws_lambda_function" "pygeoapi" {
 resource "aws_apigatewayv2_api" "pygeoapi" {
   name          = "${var.name}-gateway"
   protocol_type = "HTTP"
-   cors_configuration {
+  cors_configuration {
     allow_origins = [
-      "http://localhost:3000", 
+      "http://localhost:3000",
       "https://plants.airborne.smce.nasa.gov"
     ]
     allow_methods = [
@@ -213,26 +213,43 @@ resource "aws_apigatewayv2_api" "pygeoapi" {
 
 # Lambda integration
 resource "aws_apigatewayv2_integration" "lambda" {
-  api_id           = aws_apigatewayv2_api.pygeoapi.id
-  integration_type = "AWS_PROXY"
-  integration_uri  = aws_lambda_function.pygeoapi.invoke_arn
+  api_id                 = aws_apigatewayv2_api.pygeoapi.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.pygeoapi.invoke_arn
   payload_format_version = "1.0"
 }
 
+# Cognito JWT authorizer for data routes
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  api_id           = aws_apigatewayv2_api.pygeoapi.id
+  authorizer_type  = "JWT"
+  name             = "cognito-authorizer"
+  identity_sources = ["$request.header.Authorization"]
+
+  jwt_configuration {
+    audience = [var.cognito_client_id]
+    issuer   = "https://cognito-idp.${var.region}.amazonaws.com/${var.cognito_user_pool_id}"
+  }
+}
+
 resource "aws_apigatewayv2_route" "json_view" {
-  api_id    = aws_apigatewayv2_api.pygeoapi.id
-  route_key = "GET /views/{view_name}"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  api_id             = aws_apigatewayv2_api.pygeoapi.id
+  route_key          = "GET /views/{view_name}"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
 }
 
 resource "aws_apigatewayv2_route" "json_view_post" {
-  api_id    = aws_apigatewayv2_api.pygeoapi.id
-  route_key = "POST /views/{view_name}"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  api_id             = aws_apigatewayv2_api.pygeoapi.id
+  route_key          = "POST /views/{view_name}"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
 }
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.pygeoapi.id
-  name        = "$default"    # special default stage
+  name        = "$default" # special default stage
   auto_deploy = true
 }
 
@@ -248,7 +265,7 @@ resource "aws_lambda_permission" "apigw" {
 
 resource "aws_s3_bucket" "pygeoapi_config" {
   bucket = "pygeoapi-config"
-  tags = var.tags
+  tags   = var.tags
 }
 
 resource "aws_s3_bucket_public_access_block" "pygeoapi_config" {
@@ -258,7 +275,7 @@ resource "aws_s3_bucket_public_access_block" "pygeoapi_config" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
-  
+
 }
 
 resource "aws_s3_bucket_versioning" "pygeoapi_config" {
@@ -310,7 +327,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "pygeoapi_exports" {
     id     = "expire_exports"
     status = "Enabled"
 
-    filter {               # replace 'prefix'
+    filter { # replace 'prefix'
       prefix = "exports/"
     }
 
@@ -326,7 +343,7 @@ resource "aws_sqs_queue" "export_dlq" {
 }
 
 resource "aws_sqs_queue" "export_queue" {
-  name                      = "${var.name}-export-queue"
+  name                       = "${var.name}-export-queue"
   visibility_timeout_seconds = 900
   message_retention_seconds  = 86400
 
@@ -339,11 +356,11 @@ resource "aws_sqs_queue" "export_queue" {
 }
 
 resource "aws_vpc_endpoint" "sqs" {
-  vpc_id            = var.vpc_id             
-  service_name      = "com.amazonaws.${var.region}.sqs"
-  vpc_endpoint_type = "Interface"
-  subnet_ids = var.public_subnet_ids          
-  security_group_ids = [aws_security_group.lambda_sg.id]
+  vpc_id              = var.vpc_id
+  service_name        = "com.amazonaws.${var.region}.sqs"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = var.public_subnet_ids
+  security_group_ids  = [aws_security_group.lambda_sg.id]
   private_dns_enabled = true
 
   tags = var.tags
@@ -351,9 +368,9 @@ resource "aws_vpc_endpoint" "sqs" {
 
 
 resource "aws_dynamodb_table" "export_jobs" {
-  name           = "${var.name}-export-jobs"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "job_id"
+  name         = "${var.name}-export-jobs"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "job_id"
 
   attribute {
     name = "job_id"
@@ -363,9 +380,25 @@ resource "aws_dynamodb_table" "export_jobs" {
     name = "parent_job_id"
     type = "S"
   }
+  attribute {
+    name = "job_type"
+    type = "S"
+  }
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
   global_secondary_index {
     name            = "parent_job_id-index"
     hash_key        = "parent_job_id"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "job_type-index"
+    hash_key        = "job_type"
+    range_key       = "created_at"
     projection_type = "ALL"
   }
 
@@ -391,7 +424,7 @@ resource "aws_iam_role" "worker_lambda_role" {
 
 data "aws_iam_policy_document" "worker_lambda_policy_doc" {
   statement {
-    actions   = [
+    actions = [
       "sqs:ReceiveMessage",
       "sqs:DeleteMessage",
       "sqs:GetQueueAttributes"
@@ -400,21 +433,21 @@ data "aws_iam_policy_document" "worker_lambda_policy_doc" {
   }
 
   statement {
-    actions   = [
+    actions = [
       # "*"
       "s3:PutObject",
       "s3:PutObjectAcl",
       "s3:GetObject",
-      "s3:ListBucket", 
-      "s3:AbortMultipartUpload", 
-      "s3:ListMultipartUploadParts",     
-      "s3:ListBucketMultipartUploads" 
+      "s3:ListBucket",
+      "s3:AbortMultipartUpload",
+      "s3:ListMultipartUploadParts",
+      "s3:ListBucketMultipartUploads"
     ]
     resources = ["arn:aws:s3:::pygeoapi-config/*"]
   }
 
   statement {
-    actions   = [ 
+    actions = [
       # "*"
       "dynamodb:PutItem",
       "dynamodb:UpdateItem",
@@ -422,7 +455,7 @@ data "aws_iam_policy_document" "worker_lambda_policy_doc" {
     ]
     resources = [aws_dynamodb_table.export_jobs.arn]
   }
-  
+
 }
 
 
@@ -465,8 +498,8 @@ resource "aws_lambda_function" "worker_lambda" {
 
   environment {
     variables = {
-      S3_BUCKET   = aws_s3_bucket.pygeoapi_config.bucket
-      JOB_TABLE   = aws_dynamodb_table.export_jobs.name
+      S3_BUCKET     = aws_s3_bucket.pygeoapi_config.bucket
+      JOB_TABLE     = aws_dynamodb_table.export_jobs.name
       DB_SECRET_ARN = aws_secretsmanager_secret.pygeoapi_db.arn
     }
   }
@@ -478,10 +511,10 @@ resource "aws_lambda_function" "worker_lambda" {
 }
 
 resource "aws_lambda_event_source_mapping" "worker_sqs_trigger" {
-  event_source_arn  = aws_sqs_queue.export_queue.arn
-  function_name     = aws_lambda_function.worker_lambda.arn
-  batch_size        = 1
-  enabled           = true
+  event_source_arn = aws_sqs_queue.export_queue.arn
+  function_name    = aws_lambda_function.worker_lambda.arn
+  batch_size       = 1
+  enabled          = true
 
   tags = var.tags
 }
@@ -513,12 +546,16 @@ resource "aws_iam_role_policy" "job_status_lambda_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "dynamodb:GetItem",
           "dynamodb:Query"
         ]
-        Resource = aws_dynamodb_table.export_jobs.arn
+        Resource = [
+          aws_dynamodb_table.export_jobs.arn,
+          "${aws_dynamodb_table.export_jobs.arn}/index/parent_job_id-index",
+          "${aws_dynamodb_table.export_jobs.arn}/index/job_type-index",
+        ]
       },
       {
         Effect = "Allow"
@@ -546,21 +583,21 @@ resource "aws_lambda_function" "job_status" {
   role          = aws_iam_role.job_status_lambda_role.arn
   handler       = "app.main.lambda_handler"
   runtime       = "python3.11"
-  
+
   vpc_config {
     subnet_ids         = var.public_subnet_ids
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
-  
-  filename      = "${path.module}/job_status.zip"
+
+  filename         = "${path.module}/job_status.zip"
   source_code_hash = filebase64sha256("${path.module}/job_status.zip")
 
-  memory_size   = 128
-  timeout       = 10
+  memory_size = 128
+  timeout     = 10
 
   environment {
     variables = {
-      JOB_TABLE   = aws_dynamodb_table.export_jobs.name
+      JOB_TABLE = aws_dynamodb_table.export_jobs.name
     }
   }
 
@@ -571,16 +608,26 @@ resource "aws_lambda_function" "job_status" {
 # API Gateway Integration
 # -----------------------------
 resource "aws_apigatewayv2_integration" "job_status" {
-  api_id                  = aws_apigatewayv2_api.pygeoapi.id
-  integration_type        = "AWS_PROXY"
-  integration_uri         = aws_lambda_function.job_status.invoke_arn
-  payload_format_version  = "2.0"
+  api_id                 = aws_apigatewayv2_api.pygeoapi.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.job_status.invoke_arn
+  payload_format_version = "2.0"
 }
 
 resource "aws_apigatewayv2_route" "job_status_route" {
-  api_id    = aws_apigatewayv2_api.pygeoapi.id
-  route_key = "GET /job_status/{job_id}"
-  target    = "integrations/${aws_apigatewayv2_integration.job_status.id}"
+  api_id             = aws_apigatewayv2_api.pygeoapi.id
+  route_key          = "GET /job_status/{job_id}"
+  target             = "integrations/${aws_apigatewayv2_integration.job_status.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "isofit_jobs_route" {
+  api_id             = aws_apigatewayv2_api.pygeoapi.id
+  route_key          = "GET /isofit_jobs"
+  target             = "integrations/${aws_apigatewayv2_integration.job_status.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
 }
 
 # Permission for API Gateway to invoke Lambda

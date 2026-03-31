@@ -16,15 +16,11 @@ DB_NAME = "vswirplants"
 
 
 def get_connection():
-    try:
-        return psycopg2.connect(
-            host=DB_HOST,
-            port='5432',
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASS,
-            connect_timeout=10,
-        )
-    except Exception as e:
-        print("Type:", type(e))
-        print("Error:", repr(e))
+    return psycopg2.connect(
+        host=DB_HOST,
+        port='5432',
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS,
+        connect_timeout=10,
+    )

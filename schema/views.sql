@@ -53,7 +53,7 @@ ipe.floristic_survey,
 p.plot_method,
 ps.geom
 FROM leaf_traits lt
-JOIN sample s ON s.plot_id = lt.plot_id AND s.collection_date = s.collection_date AND s.sample_name = lt.sample_name
+JOIN sample s ON s.plot_id = lt.plot_id AND s.collection_date = lt.collection_date AND s.sample_name = lt.sample_name
 JOIN insitu_plot_event ipe ON ipe.plot_id = s.plot_id AND ipe.collection_date = s.collection_date
 JOIN plot p ON p.plot_id = ipe.plot_id
 JOIN plot_raster_intersect pri ON pri.plot_id = p.plot_id

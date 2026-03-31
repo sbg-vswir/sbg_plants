@@ -42,18 +42,29 @@ def submit_job(parent_job_id: str, pixel_ids: list, batch_index: int, campaign_n
             "created_at":    {"S": datetime.now(timezone.utc).isoformat()},
         }
     )
-    batch.submit_job(
-        jobName=f"inversion-{job_id[:8]}",
-        jobQueue=JOB_QUEUE,
-        jobDefinition=JOB_DEFINITION,
-        containerOverrides={
-            "environment": [
-                {"name": "PIXEL_IDS",      "value": ",".join(str(i) for i in pixel_ids)},
-                {"name": "CAMPAIGN_NAME",  "value": campaign_name},
-                {"name": "SENSOR_NAME",    "value": sensor_name},
-            ]
-        }
-    )
+    try:
+        batch.submit_job(
+            jobName=f"inversion-{job_id[:8]}",
+            jobQueue=JOB_QUEUE,
+            jobDefinition=JOB_DEFINITION,
+            containerOverrides={
+                "environment": [
+                    {"name": "PIXEL_IDS",      "value": ",".join(str(i) for i in pixel_ids)},
+                    {"name": "CAMPAIGN_NAME",  "value": campaign_name},
+                    {"name": "SENSOR_NAME",    "value": sensor_name},
+                ]
+            }
+        )
+    except Exception as e:
+        logger.error(f"batch.submit_job failed for job {job_id}: {e}")
+        dynamodb.update_item(
+            TableName=JOB_TABLE,
+            Key={"job_id": {"S": job_id}},
+            UpdateExpression="SET #s = :s",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={":s": {"S": "failed"}},
+        )
+        raise
     logger.info(f"submitted job {job_id} (batch {batch_index}) for {len(pixel_ids)} pixels [{campaign_name}|{sensor_name}]")
     return job_id
 
@@ -61,15 +72,53 @@ def submit_job(parent_job_id: str, pixel_ids: list, batch_index: int, campaign_n
 def lambda_handler(event, context):
     body = json.loads(event.get("body", "{}"))
     pixel_ranges = body.get("pixel_ranges")
-    
-    if not pixel_ranges:
-        return {"statusCode": 400, "body": json.dumps({"error": "missing pixel_ranges"})}
+
+    # Pull username from Cognito JWT claims injected by API Gateway
+    submitted_by = (
+        event.get("requestContext", {})
+             .get("authorizer", {})
+             .get("jwt", {})
+             .get("claims", {})
+             .get("cognito:username", "unknown")
+    )
+
+    if not pixel_ranges or not isinstance(pixel_ranges, dict):
+        return {"statusCode": 400, "body": json.dumps({"error": "missing or invalid pixel_ranges"})}
+
+    # Validate all keys and ranges before doing any work
+    for sensor_key, ranges in pixel_ranges.items():
+        if "|" not in sensor_key:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": f"invalid sensor_key format '{sensor_key}', expected 'campaign|sensor'"})
+            }
+        if not isinstance(ranges, list):
+            return {"statusCode": 400, "body": json.dumps({"error": f"ranges for '{sensor_key}' must be a list"})}
+        for entry in ranges:
+            if not (isinstance(entry, list) and len(entry) == 2 and all(isinstance(v, int) for v in entry)):
+                return {
+                    "statusCode": 400,
+                    "body": json.dumps({"error": f"each range for '{sensor_key}' must be a [start, end] integer pair"})
+                }
 
     parent_job_id = str(uuid.uuid4())
-    job_ids = []
+    created_at    = datetime.now(timezone.utc).isoformat()
+    job_ids       = []
+
+    # Write the parent job record first so it exists before any child jobs
+    dynamodb.put_item(
+        TableName=JOB_TABLE,
+        Item={
+            "job_id":       {"S": parent_job_id},
+            "job_type":     {"S": "isofit_parent"},
+            "status":       {"S": "running"},
+            "submitted_by": {"S": submitted_by},
+            "created_at":   {"S": created_at},
+        }
+    )
 
     for sensor_key, ranges in pixel_ranges.items():
-        campaign_name, sensor_name = sensor_key.split("|")
+        campaign_name, sensor_name = sensor_key.split("|", 1)
 
         # Expand ranges to flat pixel id list
         pixel_ids = []
@@ -97,7 +146,9 @@ def lambda_handler(event, context):
         "statusCode": 202,
         "body": json.dumps({
             "parent_job_id": parent_job_id,
-            "job_count": len(job_ids),
-            "batch_size": BATCH_SIZE,
+            "job_count":     len(job_ids),
+            "batch_size":    BATCH_SIZE,
+            "submitted_by":  submitted_by,
+            "created_at":    created_at,
         })
     }

@@ -294,9 +294,9 @@ CREATE TYPE vswir_plants."Trait_units" AS ENUM (
 );
 
 CREATE TYPE vswir_plants."CANOPY_position" AS ENUM (
-    "Partially shaded", 
-    "Full sun", 
-    "Mostly shaded", 
-    "Open grown", 
-    "Not recorded"
+    'Partially shaded',
+    'Full sun',
+    'Mostly shaded',
+    'Open grown',
+    'Not recorded'
 );

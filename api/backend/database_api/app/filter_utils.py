@@ -1,13 +1,6 @@
 import json
 
-from app.filter_config import (
-    STRING_FIELDS,
-    NUMERIC_FIELDS,
-    BOOLEAN_FIELDS,
-    DATE_FIELDS,
-    SPECIAL_FIELDS,
-    VIEW_FIELD_CONFIG
-)
+from app.view_config import get_field_type
 
 # ============================================================================
 #  QUERY BUILDING FUNCTIONS
@@ -122,17 +115,6 @@ def _build_date_range_clauses(filters, date_column, clauses, params):
         clauses.append(f'"{date_column}" <= %s')
         params.append(filters["end_date"])
 
-
-# def _build_geom_clause(geom, clauses, params):
-#     """Build WHERE clause for geom intersection."""
-#     # clauses.append(
-#     #     'ST_Intersects(geom, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))'
-#     # )
-#     clauses.append(
-#         'geom && ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326) AND ST_Intersects(geom, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))'
-#     )
-#     params.append(json.dumps(geom))
-
 def _build_geom_clause(geom, clauses, params):
     """Build WHERE clause for geom intersection."""
     # optimally uses the spatial index by first doing geom && ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326) filtering via bounding boxes
@@ -145,17 +127,6 @@ def _build_geom_clause(geom, clauses, params):
 
 
 
-def _get_field_type(col):
-    """Determine the type of a field."""
-    if col in STRING_FIELDS:
-        return "string"
-    elif col in NUMERIC_FIELDS:
-        return "numeric"
-    elif col in BOOLEAN_FIELDS:
-        return "boolean"
-    elif col in DATE_FIELDS:
-        return "date"
-    elif col in SPECIAL_FIELDS:
-        return "special"
-    else:
-        return None
+def _get_field_type(view_name: str, col: str):
+    """Determine the type of a field from the view config."""
+    return get_field_type(view_name, col)

@@ -1,34 +1,75 @@
-import React, { useState } from 'react';
-import { AppBar, Toolbar, Typography, Select, MenuItem, IconButton, Box, Button, Tooltip } from '@mui/material';
+import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import {
+  AppBar, Toolbar, Typography, Select, MenuItem,
+  IconButton, Box, Button, Tooltip, Tabs, Tab,
+} from '@mui/material';
 import { Refresh as RefreshIcon, Logout as LogoutIcon } from '@mui/icons-material';
-import { AdminPanelSettings as AdminIcon, Science as IsoFitIcon, Home as HomeIcon } from '@mui/icons-material';
 import { redirectToLogout } from '../utils/auth';
 import { useIsAdmin } from '../hooks/useIsAdmin';
-import AdminDialog from './AdminDialog';
 
-function Navbar({ view, views, onViewChange, onReset, showControls = true, onIsoFitClick, onHomeClick, isIsoFitMode }) {
+function Navbar({ view, views, onViewChange, onReset, showControls = true }) {
   const { isAdmin, isSuperAdmin } = useIsAdmin();
-  const [adminOpen, setAdminOpen] = useState(false);
+  const navigate  = useNavigate();
+  const location  = useLocation();
+
+  // Map pathname to tab value — unknown paths fall back to false (no tab highlighted)
+  const TAB_PATHS = ['/', '/isofit', '/ingest', '/admin'];
+  const currentTab = TAB_PATHS.includes(location.pathname) ? location.pathname : false;
 
   return (
     <>
       <AppBar position="fixed" elevation={2}>
-        <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {onHomeClick && (
-              <Tooltip title="Back to main">
-                <IconButton color="inherit" onClick={onHomeClick} size="small">
-                  <HomeIcon />
-                </IconButton>
-              </Tooltip>
-            )}
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              VSWIR Plants
-            </Typography>
-          </Box>
+        <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', minHeight: 56 }}>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {showControls && (
+          {/* Left — title */}
+          <Typography variant="h6" sx={{ fontWeight: 600, mr: 3, whiteSpace: 'nowrap' }}>
+            VSWIR Plants
+          </Typography>
+
+          {/* Centre — persistent nav tabs */}
+          <Tabs
+            value={currentTab}
+            onChange={(_, val) => navigate(val)}
+            textColor="inherit"
+            TabIndicatorProps={{ style: { backgroundColor: 'white', height: 3 } }}
+            sx={{ flex: 1 }}
+          >
+            <Tab
+              label="Query"
+              value="/"
+              sx={{ textTransform: 'none', fontWeight: 500, color: 'rgba(255,255,255,0.8)',
+                    '&.Mui-selected': { color: 'white' } }}
+            />
+            {isSuperAdmin && (
+              <Tab
+                label="ISOFIT"
+                value="/isofit"
+                sx={{ textTransform: 'none', fontWeight: 500, color: 'rgba(255,255,255,0.8)',
+                      '&.Mui-selected': { color: 'white' } }}
+              />
+            )}
+            {isAdmin && (
+              <Tab
+                label="Ingest"
+                value="/ingest"
+                sx={{ textTransform: 'none', fontWeight: 500, color: 'rgba(255,255,255,0.8)',
+                      '&.Mui-selected': { color: 'white' } }}
+              />
+            )}
+            {isAdmin && (
+              <Tab
+                label="Admin"
+                value="/admin"
+                sx={{ textTransform: 'none', fontWeight: 500, color: 'rgba(255,255,255,0.8)',
+                      '&.Mui-selected': { color: 'white' } }}
+              />
+            )}
+          </Tabs>
+
+          {/* Right — view selector, reset, logout */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {showControls && views && (
               <>
                 <Select
                   value={view}
@@ -38,39 +79,12 @@ function Navbar({ view, views, onViewChange, onReset, showControls = true, onIso
                 >
                   {views.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
                 </Select>
-                <IconButton color="inherit" onClick={onReset} title="Reset">
-                  <RefreshIcon />
-                </IconButton>
+                <Tooltip title="Reset">
+                  <IconButton color="inherit" onClick={onReset} size="small">
+                    <RefreshIcon />
+                  </IconButton>
+                </Tooltip>
               </>
-            )}
-
-            {isAdmin && (
-              <Button
-                color="inherit"
-                onClick={() => setAdminOpen(true)}
-                startIcon={<AdminIcon />}
-                sx={{ textTransform: 'none', fontWeight: 500 }}
-              >
-                Admin
-              </Button>
-            )}
-
-            {isSuperAdmin && (
-              <Button
-                color="inherit"
-                onClick={onIsoFitClick}
-                startIcon={<IsoFitIcon />}
-                sx={{
-                  textTransform: 'none',
-                  fontWeight: 500,
-                  ...(isIsoFitMode && {
-                    bgcolor: 'rgba(255,255,255,0.15)',
-                    borderRadius: 1,
-                  })
-                }}
-              >
-                {isIsoFitMode ? 'Spectral Mode' : 'ISOFIT Mode'}
-              </Button>
             )}
 
             <Button
@@ -82,10 +96,10 @@ function Navbar({ view, views, onViewChange, onReset, showControls = true, onIso
               Logout
             </Button>
           </Box>
+
         </Toolbar>
       </AppBar>
       <Toolbar />
-      <AdminDialog open={adminOpen} onClose={() => setAdminOpen(false)} />
     </>
   );
 }
