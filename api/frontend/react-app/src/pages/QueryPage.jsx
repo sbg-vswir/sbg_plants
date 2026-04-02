@@ -1,44 +1,32 @@
 import React from 'react';
 import { Container, Box, CircularProgress, Alert } from '@mui/material';
 import Navbar from '../components/Navbar';
-import FilterSection from '../components/FilterSection';
+import QueryFilterSection from '../components/QueryFilterSection';
 import JobStatus from '../components/JobStatus';
 import MapView from '../components/MapView';
 import DataTable from '../components/DataTable';
-import { VIEW_CONFIGS } from '../viewConfig';
 import { summarizeValue, convertToCSV, parseFilters } from '../utils/helpers';
 import { SELECT_CONFIGS } from '../viewConfig';
 import { fetchParquet } from '../utils/api';
-import { useDataQuery } from '../hooks/useDataQuery';
+import { useQueryPage } from '../hooks/useQueryPage';
 import { useSpectraExtraction } from '../hooks/useSpectraExtraction';
 
 function QueryPage() {
-  const [view, setView] = React.useState('plot_pixels_mv');
-  const query   = useDataQuery(view);
+  const { view, query, viewOptions, currentViewConfig, handleViewChange, handleReset, hideExtract } = useQueryPage();
+
   const spectra = useSpectraExtraction(
     query.getPixelRanges,
     query.setError,
     query.setExtractDisabled,
   );
 
-  const handleViewChange = (e) => {
-    setView(e.target.value);
-    query.reset();
-  };
-
-  const handleReset = () => {
-    setView('plot_pixels_mv');
-    query.reset();
-    spectra.reset();
-  };
-
   const handleDownloadTable = async () => {
     try {
       const filename = window.prompt('Enter file name:', 'table_data');
       if (!filename) return;
-      const filters  = parseFilters(query.filterValues, query.geojsonContent);
-      const result   = await fetchParquet(view, filters);
-      const columns  = SELECT_CONFIGS[view];
+      const filters   = parseFilters(query.filterValues, query.geojsonContent);
+      const result    = await fetchParquet(view, filters);
+      const columns   = SELECT_CONFIGS[view];
       const geomIndex = columns.findIndex(c => c === 'geom' || c === 'geometry');
 
       if (geomIndex !== -1) {
@@ -77,34 +65,20 @@ function QueryPage() {
     }
   };
 
-  const views             = Object.keys(VIEW_CONFIGS);
-  const currentViewConfig = VIEW_CONFIGS[view] || { filters: [] };
-
   return (
     <Box sx={{ flexGrow: 1 }}>
-      <Navbar
-        view={view}
-        views={views}
-        onViewChange={handleViewChange}
-        onReset={handleReset}
-      />
+      <Navbar />
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-        <FilterSection
-          filters={currentViewConfig.filters}
-          filterValues={query.filterValues}
-          onFilterChange={query.handleFilterChange}
-          geojsonFile={query.geojsonFile}
-          geojsonKey={query.geojsonResetKey}
-          onGeojsonUpload={query.handleGeojsonUpload}
-          onApplyFilters={query.handleApplyFilters}
-          onNext={query.handleNext}
-          pageSize={query.PAGE_SIZE}
+        <QueryFilterSection
+          query={query}
+          currentViewConfig={currentViewConfig}
+          view={view}
+          viewOptions={viewOptions}
+          onViewChange={handleViewChange}
+          onReset={() => handleReset(spectra.reset)}
           onExtractSpectra={spectra.handleExtractSpectra}
           onDownloadTable={handleDownloadTable}
-          loading={query.loading}
-          nextDisabled={query.nextDisabled}
-          extractDisabled={query.extractDisabled}
-          downloadTableDisabled={query.downloadTableDisabled}
+          hideExtract={hideExtract}
         />
 
         <JobStatus

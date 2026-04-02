@@ -117,7 +117,8 @@ DROP VIEW extracted_metadata_view;
 
 
 -- GRANT SELECT ON extracted_spectra, output_pixel_rfl, sensor_campaign TO isofit;
-GRANT SELECT ON extracted_spectra_view, extracted_metadata_view, reflectance_view TO isofit;
-GRANT INSERT ON output_pixel_rfl TO isofit;
-GRANT UPDATE ON output_pixel_rfl TO isofit;
+GRANT SELECT ON vswir_plants.extracted_spectra_view TO isofit;
+GRANT SELECT ON vswir_plants.extracted_metadata_view TO isofit;
+GRANT SELECT ON vswir_plants.reflectance_view TO isofit;
+GRANT INSERT, UPDATE, SELECT ON vswir_plants.output_pixel_rfl TO isofit;
 GRANT USAGE ON SCHEMA vswir_plants TO isofit;

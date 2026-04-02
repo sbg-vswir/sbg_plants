@@ -48,15 +48,19 @@ function JobStatus({ jobsBySensor, sensorStatuses }) {
 
             {state.downloadUrl && state.status === 'complete' && (
               <Button
-                component={Link}
-                href={state.downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
                 variant="contained"
                 color="success"
                 size="small"
                 startIcon={<DownloadIcon />}
                 sx={{ mt: 1 }}
+                onClick={() => {
+                  const a = document.createElement('a');
+                  a.href = state.downloadUrl;
+                  a.download = `${sensorKey}_spectra.csv`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                }}
               >
                 Download Spectra Data
               </Button>

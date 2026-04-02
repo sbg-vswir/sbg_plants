@@ -13,6 +13,7 @@ __pycache__
 tunnel.sh
 shift/
 isofit/
+.pixi/
 
 # Dependencies
 node_modules/

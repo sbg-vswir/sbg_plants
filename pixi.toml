@@ -1,0 +1,13 @@
+[project]
+name = "vswir-plants"
+version = "0.1.0"
+description = "Data management scripts for the VSWIR Plants database"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64"]
+
+[dependencies]
+python = ">=3.11"
+pandas = ">=2.0"
+psycopg2 = ">=2.9"
+boto3 = "*"
+

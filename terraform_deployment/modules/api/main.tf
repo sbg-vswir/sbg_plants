@@ -2,7 +2,7 @@
 # IAM Role for Lambda
 # -----------------------------
 resource "aws_iam_role" "lambda_exec" {
-  name = "pygeoapi-lambda-role"
+  name = "vswir-plants-database-api-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -20,14 +20,14 @@ resource "aws_iam_role" "lambda_exec" {
   tags = var.tags
 }
 
-resource "aws_secretsmanager_secret" "pygeoapi_db" {
-  name        = "pygeoapi_db_credentials"
-  description = "Database credentials for pygeoapi Lambda"
+resource "aws_secretsmanager_secret" "vswir_plants_db" {
+  name        = "vswir_plants_db_credentials"
+  description = "Database credentials for vswir plants api Lambda"
   tags        = var.tags
 }
 
-resource "aws_secretsmanager_secret_version" "pygeoapi_db_version" {
-  secret_id = aws_secretsmanager_secret.pygeoapi_db.id
+resource "aws_secretsmanager_secret_version" "vswir_plants_db_version" {
+  secret_id = aws_secretsmanager_secret.vswir_plants_db.id
   secret_string = jsonencode({
     username = var.db_user
     password = var.db_user_password
@@ -40,7 +40,7 @@ resource "aws_secretsmanager_secret_version" "pygeoapi_db_version" {
 
 
 resource "aws_iam_policy" "lambda_secrets_policy" {
-  name        = "pygeoapi_lambda_secrets_policy"
+  name        = "vswir_plants_lambda_secrets_policy"
   description = "Allow Lambda to read DB credentials from Secrets Manager"
   policy = jsonencode({
     Version = "2012-10-17"
@@ -51,7 +51,7 @@ resource "aws_iam_policy" "lambda_secrets_policy" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = aws_secretsmanager_secret.pygeoapi_db.arn
+        Resource = aws_secretsmanager_secret.vswir_plants_db.arn
       }
     ]
   })
@@ -81,7 +81,7 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
 }
 
 resource "aws_iam_policy" "lambda_sqs_send_policy" {
-  name = "pygeoapi-lambda-sqs-send-policy"
+  name = "vswir-plants-lambda-sqs-send-policy"
 
   policy = jsonencode({
     Version = "2012-10-17",
@@ -137,7 +137,7 @@ resource "aws_vpc_endpoint" "secretsmanager" {
   private_dns_enabled = true
 
   security_group_ids = [aws_security_group.lambda_sg.id]
-  subnet_ids         = var.public_subnet_ids
+  subnet_ids         = var.private_subnet_ids
 
   tags = var.tags
 }
@@ -153,24 +153,44 @@ resource "aws_vpc_endpoint" "dynamodb" {
 }
 
 
+resource "aws_vpc_endpoint" "ecr_api" {
+  vpc_id              = var.vpc_id
+  service_name        = "com.amazonaws.${var.region}.ecr.api"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  security_group_ids  = [aws_security_group.lambda_sg.id]
+  subnet_ids          = var.private_subnet_ids
+  tags                = var.tags
+}
+
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id              = var.vpc_id
+  service_name        = "com.amazonaws.${var.region}.ecr.dkr"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  security_group_ids  = [aws_security_group.lambda_sg.id]
+  subnet_ids          = var.private_subnet_ids
+  tags                = var.tags
+}
+
 # -----------------------------
 # Lambda function from ECR image
 # -----------------------------
-resource "aws_lambda_function" "pygeoapi" {
-  function_name = "pygeoapi-lambda"
+resource "aws_lambda_function" "vswir-plants" {
+  function_name = "vswir-plants-database-api"
   role          = aws_iam_role.lambda_exec.arn
   package_type  = "Image"
   image_uri     = var.ecr_image_url
 
   # VPC config for RDS access
   vpc_config {
-    subnet_ids         = var.public_subnet_ids
+    subnet_ids         = var.private_subnet_ids
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
   environment {
     variables = {
-      DB_SECRET_ARN = aws_secretsmanager_secret.pygeoapi_db.arn
+      DB_SECRET_ARN = aws_secretsmanager_secret.vswir_plants_db.arn
       SQS_QUEUE_URL = aws_sqs_queue.export_queue.url
     }
   }
@@ -184,7 +204,7 @@ resource "aws_lambda_function" "pygeoapi" {
 # -----------------------------
 # API Gateway HTTP API
 # -----------------------------
-resource "aws_apigatewayv2_api" "pygeoapi" {
+resource "aws_apigatewayv2_api" "vswir_plants" {
   name          = "${var.name}-gateway"
   protocol_type = "HTTP"
   cors_configuration {
@@ -213,15 +233,15 @@ resource "aws_apigatewayv2_api" "pygeoapi" {
 
 # Lambda integration
 resource "aws_apigatewayv2_integration" "lambda" {
-  api_id                 = aws_apigatewayv2_api.pygeoapi.id
+  api_id                 = aws_apigatewayv2_api.vswir_plants.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.pygeoapi.invoke_arn
+  integration_uri        = aws_lambda_function.vswir-plants.invoke_arn
   payload_format_version = "1.0"
 }
 
 # Cognito JWT authorizer for data routes
 resource "aws_apigatewayv2_authorizer" "cognito" {
-  api_id           = aws_apigatewayv2_api.pygeoapi.id
+  api_id           = aws_apigatewayv2_api.vswir_plants.id
   authorizer_type  = "JWT"
   name             = "cognito-authorizer"
   identity_sources = ["$request.header.Authorization"]
@@ -233,7 +253,7 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
 }
 
 resource "aws_apigatewayv2_route" "json_view" {
-  api_id             = aws_apigatewayv2_api.pygeoapi.id
+  api_id             = aws_apigatewayv2_api.vswir_plants.id
   route_key          = "GET /views/{view_name}"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -241,35 +261,36 @@ resource "aws_apigatewayv2_route" "json_view" {
 }
 
 resource "aws_apigatewayv2_route" "json_view_post" {
-  api_id             = aws_apigatewayv2_api.pygeoapi.id
+  api_id             = aws_apigatewayv2_api.vswir_plants.id
   route_key          = "POST /views/{view_name}"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
   authorization_type = "JWT"
 }
 resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.pygeoapi.id
-  name        = "$default" # special default stage
+  api_id      = aws_apigatewayv2_api.vswir_plants.id
+  name        = "$default"
   auto_deploy = true
+  tags        = var.tags
 }
 
 # Permission for API Gateway to invoke Lambda
 resource "aws_lambda_permission" "apigw" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.pygeoapi.function_name
+  function_name = aws_lambda_function.vswir-plants.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.pygeoapi.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.vswir_plants.execution_arn}/*/*"
 }
 
 
-resource "aws_s3_bucket" "pygeoapi_config" {
-  bucket = "pygeoapi-config"
+resource "aws_s3_bucket" "vswir_plants_config" {
+  bucket = "vswir-plants-config"
   tags   = var.tags
 }
 
-resource "aws_s3_bucket_public_access_block" "pygeoapi_config" {
-  bucket = aws_s3_bucket.pygeoapi_config.id
+resource "aws_s3_bucket_public_access_block" "vswir_plants_config" {
+  bucket = aws_s3_bucket.vswir_plants_config.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -278,16 +299,16 @@ resource "aws_s3_bucket_public_access_block" "pygeoapi_config" {
 
 }
 
-resource "aws_s3_bucket_versioning" "pygeoapi_config" {
-  bucket = aws_s3_bucket.pygeoapi_config.id
+resource "aws_s3_bucket_versioning" "vswir_plants_config" {
+  bucket = aws_s3_bucket.vswir_plants_config.id
 
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "pygeoapi_config" {
-  bucket = aws_s3_bucket.pygeoapi_config.id
+resource "aws_s3_bucket_server_side_encryption_configuration" "vswir_plants_config" {
+  bucket = aws_s3_bucket.vswir_plants_config.id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -296,8 +317,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "pygeoapi_config" 
   }
 }
 
-resource "aws_iam_policy" "lambda_pygeoapi_s3_read" {
-  name = "lambda-pygeoapi-s3-read"
+resource "aws_iam_policy" "lambda_vswir_plants_s3_read" {
+  name = "lambda-vswir-plants-s3-read"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -308,20 +329,20 @@ resource "aws_iam_policy" "lambda_pygeoapi_s3_read" {
           # "*"
           "s3:GetObject"
         ]
-        Resource = [aws_s3_bucket.pygeoapi_config.arn, "${aws_s3_bucket.pygeoapi_config.arn}/*"]
+        Resource = [aws_s3_bucket.vswir_plants_config.arn, "${aws_s3_bucket.vswir_plants_config.arn}/*"]
       }
     ]
   })
   tags = var.tags
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_pygeoapi_s3_attach" {
+resource "aws_iam_role_policy_attachment" "lambda_vswir_plants_s3_attach" {
   role       = aws_iam_role.lambda_exec.name
-  policy_arn = aws_iam_policy.lambda_pygeoapi_s3_read.arn
+  policy_arn = aws_iam_policy.lambda_vswir_plants_s3_read.arn
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "pygeoapi_exports" {
-  bucket = aws_s3_bucket.pygeoapi_config.id
+resource "aws_s3_bucket_lifecycle_configuration" "vswir_plants_exports" {
+  bucket = aws_s3_bucket.vswir_plants_config.id
 
   rule {
     id     = "expire_exports"
@@ -359,7 +380,7 @@ resource "aws_vpc_endpoint" "sqs" {
   vpc_id              = var.vpc_id
   service_name        = "com.amazonaws.${var.region}.sqs"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = var.public_subnet_ids
+  subnet_ids          = var.private_subnet_ids
   security_group_ids  = [aws_security_group.lambda_sg.id]
   private_dns_enabled = true
 
@@ -406,7 +427,7 @@ resource "aws_dynamodb_table" "export_jobs" {
 }
 
 resource "aws_iam_role" "worker_lambda_role" {
-  name = "pygeoapi-worker-lambda-role"
+  name = "vswir-plants-worker-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -443,7 +464,7 @@ data "aws_iam_policy_document" "worker_lambda_policy_doc" {
       "s3:ListMultipartUploadParts",
       "s3:ListBucketMultipartUploads"
     ]
-    resources = ["arn:aws:s3:::pygeoapi-config/*"]
+    resources = ["arn:aws:s3:::vswir-plants-config/*"]
   }
 
   statement {
@@ -460,7 +481,7 @@ data "aws_iam_policy_document" "worker_lambda_policy_doc" {
 
 
 resource "aws_iam_policy" "worker_lambda_policy" {
-  name   = "pygeoapi-worker-lambda-policy"
+  name   = "vswir-plants-worker-lambda-policy"
   policy = data.aws_iam_policy_document.worker_lambda_policy_doc.json
 }
 
@@ -486,21 +507,21 @@ resource "aws_iam_role_policy_attachment" "worker_vpc_access" {
 
 
 resource "aws_lambda_function" "worker_lambda" {
-  function_name = "pygeoapi-worker-lambda"
+  function_name = "vswir-plants-worker"
   role          = aws_iam_role.worker_lambda_role.arn
   package_type  = "Image"
   image_uri     = var.worker_lambda_url
 
   vpc_config {
-    subnet_ids         = var.public_subnet_ids
+    subnet_ids         = var.private_subnet_ids
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
   environment {
     variables = {
-      S3_BUCKET     = aws_s3_bucket.pygeoapi_config.bucket
+      S3_BUCKET     = aws_s3_bucket.vswir_plants_config.bucket
       JOB_TABLE     = aws_dynamodb_table.export_jobs.name
-      DB_SECRET_ARN = aws_secretsmanager_secret.pygeoapi_db.arn
+      DB_SECRET_ARN = aws_secretsmanager_secret.vswir_plants_db.arn
     }
   }
 
@@ -579,13 +600,13 @@ resource "aws_iam_role_policy_attachment" "status_vpc_access" {
 # Job Status Lambda
 # -----------------------------
 resource "aws_lambda_function" "job_status" {
-  function_name = "job-status-lambda"
+  function_name = "vswir-plants-job-status"
   role          = aws_iam_role.job_status_lambda_role.arn
   handler       = "app.main.lambda_handler"
   runtime       = "python3.11"
 
   vpc_config {
-    subnet_ids         = var.public_subnet_ids
+    subnet_ids         = var.private_subnet_ids
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
@@ -608,14 +629,14 @@ resource "aws_lambda_function" "job_status" {
 # API Gateway Integration
 # -----------------------------
 resource "aws_apigatewayv2_integration" "job_status" {
-  api_id                 = aws_apigatewayv2_api.pygeoapi.id
+  api_id                 = aws_apigatewayv2_api.vswir_plants.id
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.job_status.invoke_arn
   payload_format_version = "2.0"
 }
 
 resource "aws_apigatewayv2_route" "job_status_route" {
-  api_id             = aws_apigatewayv2_api.pygeoapi.id
+  api_id             = aws_apigatewayv2_api.vswir_plants.id
   route_key          = "GET /job_status/{job_id}"
   target             = "integrations/${aws_apigatewayv2_integration.job_status.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -623,7 +644,7 @@ resource "aws_apigatewayv2_route" "job_status_route" {
 }
 
 resource "aws_apigatewayv2_route" "isofit_jobs_route" {
-  api_id             = aws_apigatewayv2_api.pygeoapi.id
+  api_id             = aws_apigatewayv2_api.vswir_plants.id
   route_key          = "GET /isofit_jobs"
   target             = "integrations/${aws_apigatewayv2_integration.job_status.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
@@ -636,5 +657,5 @@ resource "aws_lambda_permission" "job_status_apigw" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.job_status.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.pygeoapi.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.vswir_plants.execution_arn}/*/*"
 }

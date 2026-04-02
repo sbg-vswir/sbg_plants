@@ -13,14 +13,15 @@ import { listIsofitJobs } from '../utils/api';
 const LIMIT_OPTIONS = [3, 5, 10, 20];
 
 const STATUS_CHIP = {
-  running:  { color: 'primary',  label: 'Running' },
-  complete: { color: 'success',  label: 'Complete' },
-  failed:   { color: 'error',    label: 'Failed' },
+  running:  { color: 'warning', label: 'Stale' },  // running but not active = stale
+  complete: { color: 'success', label: 'Complete' },
+  failed:   { color: 'error',   label: 'Failed' },
 };
 
 function JobCard({ job, isActive, onMonitor }) {
-  const chip  = STATUS_CHIP[job.status] ?? { color: 'default', label: job.status };
-  const isRunning = job.status === 'running';
+  // If not the active job and status is running, show as stale
+  const displayStatus = (!isActive && job.status === 'running') ? 'running' : job.status;
+  const chip = STATUS_CHIP[displayStatus] ?? { color: 'default', label: displayStatus };
 
   return (
     <Paper
@@ -38,11 +39,7 @@ function JobCard({ job, isActive, onMonitor }) {
               label={chip.label}
               color={chip.color}
               size="small"
-              icon={isRunning ? <CircularProgress size={10} color="inherit" /> : undefined}
             />
-            {isActive && (
-              <Chip label="Active" size="small" variant="outlined" color="primary" />
-            )}
           </Stack>
           <Typography
             variant="caption"
@@ -70,7 +67,7 @@ function JobCard({ job, isActive, onMonitor }) {
             onClick={() => onMonitor(job.job_id)}
             sx={{ textTransform: 'none', flexShrink: 0, ml: 1 }}
           >
-            Monitor
+            View
           </Button>
         )}
       </Stack>
@@ -83,12 +80,14 @@ export default function IsoFitHistory({ activeJobId, onMonitor }) {
   const [limit, setLimit]     = useState(5);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
+  const [loaded, setLoaded]   = useState(false);
 
   async function load() {
     setLoading(true);
     setError('');
     try {
       setJobs(await listIsofitJobs(limit));
+      setLoaded(true);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -96,11 +95,13 @@ export default function IsoFitHistory({ activeJobId, onMonitor }) {
     }
   }
 
-  // Reload when limit changes or a new active job comes in
-  useEffect(() => { load(); }, [limit, activeJobId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Only reload when limit changes if already loaded — don't auto-load on mount
+  useEffect(() => {
+    if (loaded) load();
+  }, [limit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Paper sx={{ p: 2, mt: 2 }}>
+    <Paper sx={{ p: 2 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
         <Stack direction="row" spacing={1} alignItems="center">
           <HistoryIcon fontSize="small" color="action" />
@@ -117,7 +118,7 @@ export default function IsoFitHistory({ activeJobId, onMonitor }) {
               <MenuItem key={n} value={n} sx={{ fontSize: 13 }}>Show {n}</MenuItem>
             ))}
           </Select>
-          <Tooltip title="Refresh">
+          <Tooltip title="Load / Refresh">
             <IconButton size="small" onClick={load} disabled={loading}>
               <RefreshIcon fontSize="small" />
             </IconButton>
@@ -129,13 +130,25 @@ export default function IsoFitHistory({ activeJobId, onMonitor }) {
 
       {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
 
-      {loading ? (
+      {!loaded && !loading && (
+        <Box sx={{ textAlign: 'center', py: 2 }}>
+          <Button size="small" variant="outlined" onClick={load} startIcon={<HistoryIcon />}>
+            Load Recent Jobs
+          </Button>
+        </Box>
+      )}
+
+      {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
           <CircularProgress size={24} />
         </Box>
-      ) : jobs.length === 0 ? (
+      )}
+
+      {loaded && !loading && jobs.length === 0 && (
         <Typography variant="body2" color="text.secondary">No jobs found.</Typography>
-      ) : (
+      )}
+
+      {loaded && !loading && jobs.length > 0 && (
         <Stack spacing={1}>
           {jobs.map(job => (
             <JobCard

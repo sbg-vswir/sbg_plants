@@ -67,6 +67,14 @@ const ENUMS = {
     'Water', 'Herbaceous clip strip - NEON', 'Woody individual',
   ],
 
+  canopy_position: [
+    'Partially shaded',
+    'Full sun',
+    'Mostly shaded',
+    'Open grown',
+    'Not recorded',
+  ],
+
   plant_status: [
     'Insect damaged', 'Disease damaged', 'Other damage', 'Physically damaged',
     'Not recorded', 'Flowering', 'Fruit setting', 'Fruiting',
@@ -117,6 +125,7 @@ const ENUMS = {
 export const VIEW_CONFIG = {
   plot_pixels_mv: {
     queryable: true,
+    displayName: 'Spectra',
     filters: [
       { id: 'plot_name',     label: 'Plot Name:',     type: 'text', placeholder: 'e.g., 276-ER18,001-ER18' },
       { id: 'campaign_name', label: 'Campaign Name:', type: 'text', placeholder: 'e.g., East River 2018' },
@@ -133,6 +142,8 @@ export const VIEW_CONFIG = {
 
   leaf_traits_view: {
     queryable: true,
+    displayName: 'Traits',
+    hideExtract: true,
     filters: [
       { id: 'campaign_name',       label: 'Campaign Name:',       type: 'text', placeholder: 'e.g., East River 2018' },
       { id: 'site_id',             label: 'Site ID:',             type: 'text', placeholder: 'e.g., CRBU' },
@@ -143,6 +154,7 @@ export const VIEW_CONFIG = {
       { id: 'veg_or_cover_type',   label: 'Vegetation/Cover Type:', type: 'enum', options: ENUMS.veg_or_cover_type },
       { id: 'phenophase',          label: 'Phenophase:',          type: 'enum', options: ENUMS.phenophase },
       { id: 'plant_status',        label: 'Plant Status:',        type: 'enum', options: ENUMS.plant_status },
+      { id: 'canopy_position',     label: 'Canopy Position:',     type: 'enum', options: ENUMS.canopy_position },
       { id: 'plot_veg_type',       label: 'Plot Vegetation Type:', type: 'enum', options: ENUMS.plot_veg_type },
       { id: 'subplot_cover_method', label: 'Subplot Cover Method:', type: 'enum', options: ENUMS.subplot_cover_method },
       { id: 'sample_fc_class',     label: 'Fractional Class:',    type: 'enum', options: ENUMS.sample_fc_class },
@@ -156,7 +168,7 @@ export const VIEW_CONFIG = {
       'campaign_name', 'site_id', 'plot_name', 'sample_name', 'collection_date',
       'trait', 'value', 'units', 'method', 'handling', 'error', 'error_type',
       'taxa', 'veg_or_cover_type', 'phenophase', 'sample_fc_class',
-      'sample_fc_percent', 'plant_status', 'plot_veg_type', 'subplot_cover_method',
+      'sample_fc_percent', 'canopy_position', 'plant_status', 'plot_veg_type', 'subplot_cover_method',
       'floristic_survey', 'plot_method', 'geom',
     ],
   },

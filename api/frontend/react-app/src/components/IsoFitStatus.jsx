@@ -1,25 +1,32 @@
 import React from 'react';
 import {
   Box, Typography, Paper, Grid, Chip, LinearProgress,
-  Alert, CircularProgress, Button
+  Alert, CircularProgress, Button, IconButton
 } from '@mui/material';
 import {
   CheckCircle as SuccessIcon,
   Error as ErrorIcon,
   HourglassEmpty as PendingIcon,
-  ContentCopy as CopyIcon
+  Warning as WarningIcon,
+  ContentCopy as CopyIcon,
+  PlayArrow as MonitorIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { useIsoFitPolling } from '../hooks/useIsoFitPolling';
 
+const STATUS_CONFIG = {
+  complete:    { color: 'success', label: 'Complete',    icon: <SuccessIcon fontSize="small" /> },
+  failed:      { color: 'error',   label: 'Failed',      icon: <ErrorIcon fontSize="small" /> },
+  partial:     { color: 'warning', label: 'Partial Fail', icon: <WarningIcon fontSize="small" /> },
+  in_progress: { color: 'primary', label: 'In Progress', icon: <CircularProgress size={12} color="inherit" /> },
+  submitted:   { color: 'info',    label: 'Submitted',   icon: <PendingIcon fontSize="small" /> },
+  unknown:     { color: 'default', label: 'Unknown',     icon: <PendingIcon fontSize="small" /> },
+  loading:     { color: 'default', label: 'Loading',     icon: <CircularProgress size={12} color="inherit" /> },
+};
+
 function StatusChip({ status }) {
-  const map = {
-    complete: { color: 'success', icon: <SuccessIcon fontSize="small" /> },
-    running:  { color: 'primary', icon: <CircularProgress size={12} /> },
-    failed:   { color: 'error',   icon: <ErrorIcon fontSize="small" /> },
-    queued:   { color: 'default', icon: <PendingIcon fontSize="small" /> },
-  };
-  const { color, icon } = map[status] ?? map.queued;
-  return <Chip label={status} color={color} size="small" icon={icon} />;
+  const { color, label, icon } = STATUS_CONFIG[status] ?? STATUS_CONFIG.unknown;
+  return <Chip label={label} color={color} size="small" icon={icon} />;
 }
 
 function MetricCard({ label, value, color }) {
@@ -35,8 +42,9 @@ function MetricCard({ label, value, color }) {
   );
 }
 
-export default function IsoFitStatus({ parentJobId, isPolling, onStopPolling }) {
-  const { jobData, pollingError, lastUpdated, isComplete } = useIsoFitPolling(parentJobId, isPolling);
+export default function IsoFitStatus({ parentJobId, isPolling, onStopPolling, onStartPolling, onClose }) {
+  const { jobData, pollingError, lastUpdated, isComplete, canPoll, derivedStatus } =
+    useIsoFitPolling(parentJobId, isPolling);
 
   const copyToClipboard = (text) => navigator.clipboard.writeText(text);
 
@@ -48,8 +56,8 @@ export default function IsoFitStatus({ parentJobId, isPolling, onStopPolling }) 
     : 0;
 
   const batchCounts = jobData?.statuses
-    ? Object.values(jobData.statuses).reduce((acc, s) => {
-        acc[s] = (acc[s] || 0) + 1;
+    ? Object.entries(jobData.statuses).reduce((acc, [s, count]) => {
+        acc[s] = (acc[s] || 0) + count;
         return acc;
       }, {})
     : {};
@@ -57,7 +65,7 @@ export default function IsoFitStatus({ parentJobId, isPolling, onStopPolling }) 
   if (!parentJobId) return null;
 
   return (
-    <Paper sx={{ p: 2.5, mb: 3 }}>
+    <Paper sx={{ p: 2.5, mb: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="subtitle1" fontWeight={600}>IsoFit Job:</Typography>
@@ -67,20 +75,26 @@ export default function IsoFitStatus({ parentJobId, isPolling, onStopPolling }) 
           </Button>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          {isComplete && <StatusChip status="complete" />}
-          {isPolling && !isComplete && <StatusChip status="running" />}
-          {!isPolling && !isComplete && jobData && <StatusChip status="queued" />}
+          <StatusChip status={derivedStatus} />
           {isPolling && (
             <Button size="small" variant="outlined" color="error" onClick={onStopPolling}>
               Stop
             </Button>
           )}
+          {!isPolling && canPoll && derivedStatus !== 'failed' && derivedStatus !== 'complete' && (
+            <Button size="small" variant="outlined" color="primary" startIcon={<MonitorIcon />} onClick={onStartPolling}>
+              Monitor
+            </Button>
+          )}
+          <IconButton size="small" onClick={() => { onStopPolling?.(); onClose?.(); }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
         </Box>
       </Box>
 
       {pollingError && <Alert severity="error" sx={{ mb: 2 }}>{pollingError}</Alert>}
 
-      {!jobData && isPolling && (
+      {!jobData && !pollingError && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
           <CircularProgress />
         </Box>

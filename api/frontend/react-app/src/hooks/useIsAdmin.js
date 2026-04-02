@@ -7,8 +7,6 @@ export function useIsAdmin() {
   const raw = user?.['cognito:groups'] ?? [];
   const groups = Array.isArray(raw) ? raw : [raw];
 
-  console.log('[useIsAdmin] groups:', groups);
-
   return {
     isAdmin: groups.includes('admins') || groups.includes('superadmins'),
     isSuperAdmin: groups.includes('superadmins'),

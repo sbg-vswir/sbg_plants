@@ -23,9 +23,9 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "public" {
   count = local.az_count
 
-  availability_zone      = var.aws_availability_zones[count.index]
-  cidr_block             = cidrsubnet(var.vpc_cidr_block, local.newbits, count.index * 2)
-  vpc_id                 = aws_vpc.main.id
+  availability_zone       = var.aws_availability_zones[count.index]
+  cidr_block              = cidrsubnet(var.vpc_cidr_block, local.newbits, count.index * 2)
+  vpc_id                  = aws_vpc.main.id
   map_public_ip_on_launch = true
 
   tags = merge(var.tags, { "Name" = "public-${count.index}" })
@@ -42,17 +42,17 @@ resource "aws_subnet" "public" {
 resource "aws_subnet" "private" {
   count = local.az_count
 
-  availability_zone = var.aws_availability_zones[count.index]
-  cidr_block        = cidrsubnet(var.vpc_cidr_block, local.newbits, count.index * 2 + 1)
-  vpc_id            = aws_vpc.main.id
+  availability_zone       = var.aws_availability_zones[count.index]
+  cidr_block              = cidrsubnet(var.vpc_cidr_block, local.newbits, count.index * 2 + 1)
+  vpc_id                  = aws_vpc.main.id
   map_public_ip_on_launch = false
 
   tags = merge(var.tags, { "Name" = "private-${count.index}" })
 
   lifecycle {
-    ignore_changes = [      
+    ignore_changes = [
       availability_zone,
-      cidr_block]
+    cidr_block]
   }
 }
 
@@ -65,17 +65,17 @@ resource "aws_internet_gateway" "main" {
 
 # Route the public subnet traffic through the IGW
 resource "aws_route" "internet_access" {
-    route_table_id         = aws_vpc.main.main_route_table_id
-    destination_cidr_block = "0.0.0.0/0"
-    gateway_id             = aws_internet_gateway.main.id
+  route_table_id         = aws_vpc.main.main_route_table_id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.main.id
 }
 
 
 # Create a new route table for the private subnets, 
 resource "aws_route_table" "private" {
-    count  = length(var.aws_availability_zones)
-    vpc_id = aws_vpc.main.id
-
+  count  = length(var.aws_availability_zones)
+  vpc_id = aws_vpc.main.id
+  tags   = var.tags
 }
 
 
@@ -88,8 +88,8 @@ variable "private_subnet_to_rt" {
 }
 
 resource "aws_route_table_association" "private" {
-  for_each      = var.private_subnet_to_rt
-  subnet_id     = each.key
+  for_each       = var.private_subnet_to_rt
+  subnet_id      = each.key
   route_table_id = each.value
 }
 
@@ -103,7 +103,7 @@ resource "aws_route_table_association" "private" {
 resource "aws_security_group" "main" {
   name        = "vswir-plants_security_group"
   description = "security group for plants database"
-  vpc_id = aws_vpc.main.id
+  vpc_id      = aws_vpc.main.id
 
   egress {
     from_port   = 0
@@ -156,26 +156,26 @@ resource "aws_security_group" "bastion_sg" {
 
 resource "aws_key_pair" "bastion-key" {
   key_name   = "${var.name}-bastion-key"
-  public_key = file("~/.ssh/bastion-key.pub")  # Path to your public key file
-  tags = var.tags
+  public_key = var.bastion_public_key
+  tags       = var.tags
 }
 
 # Create a bastion instance
 
 resource "aws_instance" "bastion_instance" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t2.micro" 
-  subnet_id              = aws_subnet.public.*.id[0]
-  vpc_security_group_ids         = [aws_security_group.bastion_sg.id]
-  key_name               = "${var.name}-bastion-key"
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.public.*.id[0]
+  vpc_security_group_ids      = [aws_security_group.bastion_sg.id]
+  key_name                    = "${var.name}-bastion-key"
   associate_public_ip_address = true
-  iam_instance_profile = "SMCE_SSMAgent"
+  iam_instance_profile        = "SMCE_SSMAgent"
 
   tags = var.tags
 
   lifecycle {
-  ignore_changes = [tags, associate_public_ip_address]
-}
+    ignore_changes = [tags, associate_public_ip_address]
+  }
 }
 
 resource "aws_vpc_endpoint" "s3" {
@@ -184,5 +184,46 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_endpoint_type = "Gateway"
 
   # Attach to your VPC's route tables
-  route_table_ids =  concat([aws_vpc.main.main_route_table_id], aws_route_table.private[*].id)
+  route_table_ids = concat([aws_vpc.main.main_route_table_id], aws_route_table.private[*].id)
 }
+
+module "fck-nat" {
+  source = "git::https://github.com/RaJiska/terraform-aws-fck-nat.git"
+  count  = 2
+
+  name          = "natgateway-${count.index}"
+  vpc_id        = aws_vpc.main.id
+  subnet_id     = [aws_subnet.public[0].id, aws_subnet.public[1].id][count.index]
+  ha_mode       = true
+  instance_type = "t4g.nano"
+
+  update_route_tables = true
+
+  route_tables_ids = {
+    private = [
+      "rtb-0365520b4a1559725",
+      "rtb-0170d75790e6ec02e"
+    ][count.index]
+  }
+
+  tags = merge({ Name = "natgateway-${count.index}" }, var.tags)
+}
+
+resource "aws_iam_role_policy_attachment" "policy-attachment-ssm" {
+  count      = 2
+  role       = module.fck-nat[count.index].name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "policy-attachment-agent-admin" {
+  count      = 2
+  role       = module.fck-nat[count.index].name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentAdminPolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "policy-attachment-agent-server" {
+  count      = 2
+  role       = module.fck-nat[count.index].name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+

@@ -125,7 +125,7 @@ export const adminApi = {
 };
 
 export async function submitIsofitRun(payload) {
-    const response = await client.post(`/isofit_run`, payload, {responseType: 'json'});
+    const response = await client.post(`/run_isofit`, payload, {responseType: 'json'});
     return response;
 }
 

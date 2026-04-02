@@ -102,7 +102,7 @@ resource "aws_cognito_user_pool_client" "vswir_spa_client" {
 
   access_token_validity  = 60
   id_token_validity      = 60
-  refresh_token_validity = 1
+  refresh_token_validity = 7
 
 }
 

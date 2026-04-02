@@ -129,7 +129,7 @@ CREATE TABLE vswir_plants.output_pixel_fc (
 CREATE TABLE vswir_plants.output_pixel_rfl (
     pixel_id INTEGER PRIMARY KEY,
     reflectance FLOAT4[] NOT NULL,
-    uncertainty_ref FLOAT4[] NOT NULL,
+    -- uncertainty_ref FLOAT4[] NOT NULL, dropped for now
     CONSTRAINT output_pixel_rfl_pixel_fkey FOREIGN KEY (pixel_id)
         REFERENCES vswir_plants.pixel(pixel_id) 
         ON DELETE CASCADE

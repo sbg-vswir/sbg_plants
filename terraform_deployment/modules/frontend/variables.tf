@@ -6,7 +6,7 @@ variable "aws_region" {
 variable "spa_bucket_name" {
   description = "Existing S3 bucket for SPA"
   type        = string
-  default     = "pygeoapi-config"
+  default     = "vswir-plants-config"
 }
 
 variable "spa_subdomain" {

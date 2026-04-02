@@ -1,14 +1,14 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  AppBar, Toolbar, Typography, Select, MenuItem,
+  AppBar, Toolbar, Typography,
   IconButton, Box, Button, Tooltip, Tabs, Tab,
 } from '@mui/material';
-import { Refresh as RefreshIcon, Logout as LogoutIcon } from '@mui/icons-material';
+import { Logout as LogoutIcon } from '@mui/icons-material';
 import { redirectToLogout } from '../utils/auth';
 import { useIsAdmin } from '../hooks/useIsAdmin';
 
-function Navbar({ view, views, onViewChange, onReset, showControls = true }) {
+function Navbar({ showControls = true }) {
   const { isAdmin, isSuperAdmin } = useIsAdmin();
   const navigate  = useNavigate();
   const location  = useLocation();
@@ -67,25 +67,8 @@ function Navbar({ view, views, onViewChange, onReset, showControls = true }) {
             )}
           </Tabs>
 
-          {/* Right — view selector, reset, logout */}
+          {/* Right — logout */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {showControls && views && (
-              <>
-                <Select
-                  value={view}
-                  onChange={onViewChange}
-                  variant="standard"
-                  sx={{ color: 'white', '& .MuiSelect-icon': { color: 'white' }, minWidth: 120 }}
-                >
-                  {views.map(v => <MenuItem key={v} value={v}>{v}</MenuItem>)}
-                </Select>
-                <Tooltip title="Reset">
-                  <IconButton color="inherit" onClick={onReset} size="small">
-                    <RefreshIcon />
-                  </IconButton>
-                </Tooltip>
-              </>
-            )}
 
             <Button
               color="inherit"

@@ -1,102 +1,83 @@
 import React from 'react';
 import { Container, Box, CircularProgress, Alert, Stack } from '@mui/material';
 import Navbar from '../components/Navbar';
-import FilterSection from '../components/FilterSection';
+import QueryFilterSection from '../components/QueryFilterSection';
 import IsoFitStatus from '../components/IsoFitStatus';
 import IsoFitHistory from '../components/IsoFitHistory';
 import MapView from '../components/MapView';
 import DataTable from '../components/DataTable';
-import { VIEW_CONFIGS } from '../viewConfig';
 import { summarizeValue } from '../utils/helpers';
-import { useDataQuery } from '../hooks/useDataQuery';
+import { useQueryPage } from '../hooks/useQueryPage';
 import { useIsoFitJob } from '../hooks/useIsoFitJob';
 
 function IsoFitPage() {
-  const [view, setView] = React.useState('plot_pixels_mv');
-  const query  = useDataQuery(view);
+  const { view, query, viewOptions, currentViewConfig, handleViewChange, handleReset, hideExtract } = useQueryPage();
+
   const isofit = useIsoFitJob(
     query.getPixelRanges,
     query.setError,
     query.setExtractDisabled,
   );
 
-  const handleViewChange = (e) => {
-    setView(e.target.value);
-    query.reset();
-  };
-
-  const handleReset = () => {
-    setView('plot_pixels_mv');
-    query.reset();
-    isofit.reset();
-  };
-
-  const views             = Object.keys(VIEW_CONFIGS);
-  const currentViewConfig = VIEW_CONFIGS[view] || { filters: [] };
-
   return (
     <Box sx={{ flexGrow: 1 }}>
-      <Navbar
-        view={view}
-        views={views}
-        onViewChange={handleViewChange}
-        onReset={handleReset}
-      />
+      <Navbar />
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+
+        {/* ── Top — job monitoring + history full width ──────────────────── */}
+        <Box sx={{ mb: 3 }}>
+          <IsoFitStatus
+            parentJobId={isofit.isoFitJobId}
+            isPolling={isofit.isIsoFitPolling}
+            onStopPolling={() => isofit.setIsIsoFitPolling(false)}
+            onStartPolling={() => isofit.setIsIsoFitPolling(true)}
+            onClose={() => { isofit.setIsIsoFitPolling(false); isofit.setActiveJobId(null); }}
+          />
+          <IsoFitHistory
+            activeJobId={isofit.isoFitJobId}
+            onMonitor={(jobId) => {
+              isofit.setActiveJobId(jobId);
+              isofit.setIsIsoFitPolling(false);
+            }}
+          />
+        </Box>
+
+        {/* ── Bottom — filters left, map + table right ────────────────────── */}
         <Stack direction={{ xs: 'column', lg: 'row' }} spacing={3} alignItems="flex-start">
 
-          {/* ── Left — filter + job status ────────────────────────────── */}
-          <Box sx={{ width: { xs: '100%', lg: 420 }, flexShrink: 0 }}>
-            <FilterSection
-              filters={currentViewConfig.filters}
-              filterValues={query.filterValues}
-              onFilterChange={query.handleFilterChange}
-              geojsonFile={query.geojsonFile}
-              geojsonKey={query.geojsonResetKey}
-              onGeojsonUpload={query.handleGeojsonUpload}
-              onApplyFilters={query.handleApplyFilters}
-              onNext={query.handleNext}
-              pageSize={query.PAGE_SIZE}
+          {/* Left — filters */}
+          <Box sx={{ width: { xs: '100%', lg: 380 }, flexShrink: 0 }}>
+            <QueryFilterSection
+              query={query}
+              currentViewConfig={currentViewConfig}
+              view={view}
+              viewOptions={viewOptions}
+              onViewChange={handleViewChange}
+              onReset={() => handleReset(isofit.reset)}
               onExtractSpectra={() => {
                 if (!window.confirm('Are you sure you want to run ISOFIT?')) return;
                 isofit.handleRunIsoFit();
               }}
               extractLabel="Run ISOFIT"
               onDownloadTable={() => {}}
-              loading={query.loading}
-              nextDisabled={query.nextDisabled}
-              extractDisabled={query.extractDisabled}
               downloadTableDisabled
+              hideExtract={hideExtract}
             />
 
             {query.loading && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
                 <CircularProgress />
               </Box>
             )}
 
             {query.error && (
-              <Alert severity="error" sx={{ mb: 2 }} onClose={() => query.setError(null)}>
+              <Alert severity="error" sx={{ mt: 2 }} onClose={() => query.setError(null)}>
                 {query.error}
               </Alert>
             )}
-
-            <IsoFitStatus
-              parentJobId={isofit.isoFitJobId}
-              isPolling={isofit.isIsoFitPolling}
-              onStopPolling={() => isofit.setIsIsoFitPolling(false)}
-            />
-
-            <IsoFitHistory
-              activeJobId={isofit.isoFitJobId}
-              onMonitor={(jobId) => {
-                isofit.setActiveJobId(jobId);
-                isofit.setIsIsoFitPolling(true);
-              }}
-            />
           </Box>
 
-          {/* ── Right — map (collapsed by default) + table ────────────── */}
+          {/* Right — map + table */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <MapView
               mapData={query.mapData}
@@ -110,6 +91,7 @@ function IsoFitPage() {
               columns={query.tableColumns}
               data={query.tableData}
               summarizeValue={summarizeValue}
+              defaultCollapsed
             />
           </Box>
 

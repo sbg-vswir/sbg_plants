@@ -19,10 +19,9 @@ variable "db_password" {
 }
 
 variable "db_port" {
-    description = "port for postgres db"
-    type        = string
+  description = "port for postgres db"
+  type        = string
 }
-
 
 variable "aws_availability_zones" {
   description = "AWS Availability zones to operate infrastructure"
@@ -35,30 +34,31 @@ variable "region" {
 }
 
 variable "db_name" {
-    description = "name of the postgres db"
-    type        = string
+  description = "name of the postgres db"
+  type        = string
 }
 
 variable "ecr_image_url" {
-    type  = string
+  type = string
 }
 
 variable "worker_lambda_url" {
-    type  = string
+  type = string
 }
 
 variable "db_user" {
-    type  = string
+  type = string
 }
 
 variable "db_user_password" {
-    type  = string
+  type = string
 }
 
 variable "spa_domain" {
   description = "Full domain of the SPA (used for callback and logout URLs)"
   type        = string
 }
+
 variable "isofit_user_password" {
   description = "password for isofit user"
   type        = string
@@ -66,5 +66,25 @@ variable "isofit_user_password" {
 
 variable "isofit_user" {
   description = "username for isofit user"
+  type        = string
+}
+
+variable "isofit_ecr_image" {
+  description = "ECR image URI for the isofit batch worker"
+  type        = string
+}
+
+variable "isofit_ami_id" {
+  description = "AMI ID for the isofit EC2 batch worker (built with Packer)"
+  type        = string
+}
+
+variable "pixel_selection_ecr_image" {
+  description = "ECR image URI for the pixel selection Lambda"
+  type        = string
+}
+
+variable "bastion_public_key" {
+  description = "Public key for bastion SSH key pair"
   type        = string
 }

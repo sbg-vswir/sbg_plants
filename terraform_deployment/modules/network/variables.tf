@@ -22,3 +22,8 @@ variable "region" {
   description = "AWS region"
   type        = string
 }
+
+variable "bastion_public_key" {
+  description = "Public key for bastion SSH key pair"
+  type        = string
+}

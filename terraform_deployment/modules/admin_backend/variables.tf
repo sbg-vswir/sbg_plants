@@ -27,3 +27,9 @@ variable "api_execution_arn" {
   type        = string
   description = "Execution ARN of the API Gateway HTTP API"
 }
+
+variable "tags" {
+  description = "Tags to apply to all resources"
+  type        = map(string)
+  default     = {}
+}

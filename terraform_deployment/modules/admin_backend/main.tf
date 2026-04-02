@@ -7,7 +7,7 @@ locals {
 # ── IAM ──────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "admin_users_lambda_role" {
-  name = "admin-users-lambda-role"
+  name = "vswir-plants-admin-users-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -17,6 +17,8 @@ resource "aws_iam_role" "admin_users_lambda_role" {
       Action    = "sts:AssumeRole"
     }]
   })
+
+  tags = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "admin_users_basic_execution" {
@@ -48,16 +50,16 @@ resource "aws_iam_role_policy" "admin_users_cognito" {
 # ── Lambda ────────────────────────────────────────────────────────────
 
 resource "aws_lambda_function" "admin_users" {
-  function_name    = "admin-users-lambda"
-  role             = aws_iam_role.admin_users_lambda_role.arn
-  handler          = "app.main.handler"
-  runtime          = "python3.11"
+  function_name = "vswir-plants-admin-users"
+  role          = aws_iam_role.admin_users_lambda_role.arn
+  handler       = "app.main.handler"
+  runtime       = "python3.11"
 
   filename         = local.admin_zip
   source_code_hash = filebase64sha256(local.admin_zip)
 
   memory_size = 128
-  timeout     = 30  # higher than yours since list_users fans out per user
+  timeout     = 30 # higher than yours since list_users fans out per user
 
   environment {
     variables = {

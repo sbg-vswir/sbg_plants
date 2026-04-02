@@ -11,8 +11,17 @@ variable "public_subnets" {
   type = list(string)
 }
 
+variable "isofit_ami_id" {
+  description = "AMI ID for the isofit EC2 batch worker (built with Packer)"
+  type        = string
+}
+
 variable "ecr_image" {
-  description = "ECR image URI for worker"
+  description = "ECR image URI for the isofit batch worker container (Fargate — kept for reference)"
+}
+
+variable "pixel_selection_ecr_image" {
+  description = "ECR image URI for the pixel selection Lambda container"
 }
 
 variable "db_security_group_id" {
@@ -21,8 +30,18 @@ variable "db_security_group_id" {
 variable "api_id" {
   description = "API Gateway ID for Lambda integration"
 }
-variable "db_secret_arn"       {}
-variable "dynamodb_table_arn"  {}
+
+variable "api_execution_arn" {
+  description = "API Gateway execution ARN for Lambda permission"
+  type        = string
+}
+
+variable "cognito_authorizer_id" {
+  description = "Cognito JWT authorizer ID from the api module"
+  type        = string
+}
+variable "db_secret_arn" {}
+variable "dynamodb_table_arn" {}
 variable "dynamodb_table_name" {}
 variable "vpc_cidr_block" {
   description = "VPC cidr for subnets to be inside of"
@@ -45,13 +64,13 @@ variable "isofit_user" {
 }
 
 variable "db_port" {
-    description = "port for postgres db"
-    type        = string
+  description = "port for postgres db"
+  type        = string
 }
 
 variable "db_host_url" {
-    description = "host url for postgres db"
-    type        = string
+  description = "host url for postgres db"
+  type        = string
 }
 
 variable "db_name" {

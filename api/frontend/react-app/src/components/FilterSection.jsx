@@ -1,11 +1,13 @@
 import React from 'react';
 import {
-  Paper, Typography, TextField, Button, Box, Stack, Chip, Autocomplete
+  Paper, Typography, TextField, Button, Box, Stack, Chip,
+  Autocomplete, ToggleButton, ToggleButtonGroup, IconButton, Tooltip,
 } from '@mui/material';
 import {
   FilterAlt as FilterIcon,
   NavigateNext as NextIcon,
-  Download as DownloadIcon
+  Download as DownloadIcon,
+  RestartAlt as ResetIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
@@ -26,14 +28,45 @@ function FilterSection({
   extractDisabled,
   downloadTableDisabled,
   extractLabel = 'Extract Spectra',
+  // view selector
+  view,
+  views,
+  onViewChange,
+  onReset,
+  hideExtract = false,
 }) {
   return (
     <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
         <FilterIcon color="primary" />
         <Typography variant="h6">Filters</Typography>
+        <Box sx={{ flex: 1 }} />
+        {onReset && (
+          <Tooltip title="Reset">
+            <IconButton size="small" onClick={onReset}>
+              <ResetIcon />
+            </IconButton>
+          </Tooltip>
+        )}
       </Stack>
-      
+
+      {/* View selector */}
+      {views && views.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <ToggleButtonGroup
+            value={view}
+            exclusive
+            onChange={(_, val) => { if (val) onViewChange(val); }}
+            size="small"
+          >
+            {views.map(v => (
+              <ToggleButton key={v.key} value={v.key} sx={{ textTransform: 'none', px: 2 }}>
+                {v.label}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        </Box>
+      )}
       {/* Filter Inputs */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 2, mb: 3 }}>
         {filters.map(filter => {
@@ -120,14 +153,16 @@ function FilterSection({
         >
           Next {pageSize}
         </Button>
-        <Button
-          variant="contained"
-          color="secondary"
-          onClick={onExtractSpectra}
-          disabled={extractDisabled || loading}
-        >
-          {extractLabel}
-        </Button>
+        {!hideExtract && (
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={onExtractSpectra}
+            disabled={extractDisabled || loading}
+          >
+            {extractLabel}
+          </Button>
+        )}
         <Button
           variant="outlined"
           startIcon={<DownloadIcon />}

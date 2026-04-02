@@ -8,10 +8,20 @@ export function summarizeValue(v, n = 2) {
   if (v === null || v === undefined) {
     return '—';
   }
-  
+
   // Handle BigInt
   if (typeof v === 'bigint') {
     return v.toString();
+  }
+
+  // Format ISO date strings as YYYY-MM-DD — strip time and quotes
+  if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}(T.*)?$/.test(v)) {
+    return v.slice(0, 10);
+  }
+
+  // Strip leading/trailing whitespace from strings
+  if (typeof v === 'string') {
+    return v.trim();
   }
   
   if (Array.isArray(v)) {
@@ -24,6 +34,10 @@ export function summarizeValue(v, n = 2) {
   }
   
   if (typeof v === 'object') {
+    // Date objects — format as YYYY-MM-DD
+    if (v instanceof Date) {
+      return v.toISOString().slice(0, 10);
+    }
     return JSON.stringify(v, (key, value) =>
       typeof value === 'bigint' ? value.toString() : value
     );
