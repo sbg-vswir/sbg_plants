@@ -11,13 +11,8 @@ variable "public_subnets" {
   type = list(string)
 }
 
-variable "isofit_ami_id" {
-  description = "AMI ID for the isofit EC2 batch worker (built with Packer)"
-  type        = string
-}
-
 variable "ecr_image" {
-  description = "ECR image URI for the isofit batch worker container (Fargate — kept for reference)"
+  description = "ECR image URI for the isofit batch worker container"
 }
 
 variable "pixel_selection_ecr_image" {
@@ -27,6 +22,7 @@ variable "pixel_selection_ecr_image" {
 variable "db_security_group_id" {
   description = "Security group of database to allow access"
 }
+
 variable "api_id" {
   description = "API Gateway ID for Lambda integration"
 }
@@ -40,9 +36,11 @@ variable "cognito_authorizer_id" {
   description = "Cognito JWT authorizer ID from the api module"
   type        = string
 }
+
 variable "db_secret_arn" {}
 variable "dynamodb_table_arn" {}
 variable "dynamodb_table_name" {}
+
 variable "vpc_cidr_block" {
   description = "VPC cidr for subnets to be inside of"
   type        = string
@@ -75,5 +73,15 @@ variable "db_host_url" {
 
 variable "db_name" {
   description = "name of postgres db"
+  type        = string
+}
+
+variable "config_bucket_name" {
+  description = "S3 bucket name for isofit app code and exports"
+  type        = string
+}
+
+variable "config_bucket_arn" {
+  description = "S3 bucket ARN for isofit app code and exports"
   type        = string
 }

@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box, Typography, Paper, Grid, Chip, LinearProgress,
-  Alert, CircularProgress, Button, IconButton
+  Alert, CircularProgress, Button, IconButton, Slider
 } from '@mui/material';
 import {
   CheckCircle as SuccessIcon,
@@ -24,6 +24,10 @@ const STATUS_CONFIG = {
   loading:     { color: 'default', label: 'Loading',     icon: <CircularProgress size={12} color="inherit" /> },
 };
 
+const POLL_MIN = 30;
+const POLL_MAX = 600;
+const POLL_DEFAULT = 60;
+
 function StatusChip({ status }) {
   const { color, label, icon } = STATUS_CONFIG[status] ?? STATUS_CONFIG.unknown;
   return <Chip label={label} color={color} size="small" icon={icon} />;
@@ -43,8 +47,10 @@ function MetricCard({ label, value, color }) {
 }
 
 export default function IsoFitStatus({ parentJobId, isPolling, onStopPolling, onStartPolling, onClose }) {
+  const [pollIntervalSecs, setPollIntervalSecs] = useState(POLL_DEFAULT);
+
   const { jobData, pollingError, lastUpdated, isComplete, canPoll, derivedStatus } =
-    useIsoFitPolling(parentJobId, isPolling);
+    useIsoFitPolling(parentJobId, isPolling, pollIntervalSecs * 1000);
 
   const copyToClipboard = (text) => navigator.clipboard.writeText(text);
 
@@ -90,6 +96,22 @@ export default function IsoFitStatus({ parentJobId, isPolling, onStopPolling, on
             <CloseIcon fontSize="small" />
           </IconButton>
         </Box>
+      </Box>
+
+      {/* Poll interval control */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, maxWidth: 360 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+          Poll every {pollIntervalSecs}s
+        </Typography>
+        <Slider
+          value={pollIntervalSecs}
+          min={POLL_MIN}
+          max={POLL_MAX}
+          step={30}
+          onChange={(_, val) => setPollIntervalSecs(val)}
+          disabled={isPolling}
+          size="small"
+        />
       </Box>
 
       {pollingError && <Alert severity="error" sx={{ mb: 2 }}>{pollingError}</Alert>}

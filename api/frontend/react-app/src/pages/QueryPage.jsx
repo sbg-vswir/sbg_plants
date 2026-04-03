@@ -79,6 +79,8 @@ function QueryPage() {
           onExtractSpectra={spectra.handleExtractSpectra}
           onDownloadTable={handleDownloadTable}
           hideExtract={hideExtract}
+          spectraType={spectra.spectraType}
+          onSpectraTypeChange={spectra.setSpectraType}
         />
 
         <JobStatus

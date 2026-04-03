@@ -570,13 +570,19 @@ resource "aws_iam_role_policy" "job_status_lambda_policy" {
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
-          "dynamodb:Query"
+          "dynamodb:Query",
+          "dynamodb:UpdateItem"
         ]
         Resource = [
           aws_dynamodb_table.export_jobs.arn,
           "${aws_dynamodb_table.export_jobs.arn}/index/parent_job_id-index",
           "${aws_dynamodb_table.export_jobs.arn}/index/job_type-index",
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["batch:DescribeJobs"]
+        Resource = "*"
       },
       {
         Effect = "Allow"
@@ -614,7 +620,7 @@ resource "aws_lambda_function" "job_status" {
   source_code_hash = filebase64sha256("${path.module}/job_status.zip")
 
   memory_size = 128
-  timeout     = 10
+  timeout     = 30
 
   environment {
     variables = {

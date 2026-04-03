@@ -106,7 +106,6 @@ module "isofit_pipeline" {
   dynamodb_table_arn        = module.api.export_jobs_table_arn
   dynamodb_table_name       = module.api.export_jobs_table_name
   ecr_image                 = var.isofit_ecr_image
-  isofit_ami_id             = var.isofit_ami_id
   pixel_selection_ecr_image = var.pixel_selection_ecr_image
   cognito_authorizer_id     = module.api.cognito_authorizer_id
   api_execution_arn         = module.api.api_execution_arn
@@ -117,4 +116,6 @@ module "isofit_pipeline" {
   db_name                   = var.db_name
   region                    = var.region
   tags                      = var.tags
+  config_bucket_name        = module.api.config_bucket_name
+  config_bucket_arn         = module.api.config_bucket_arn
 }

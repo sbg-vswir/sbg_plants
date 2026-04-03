@@ -25,3 +25,11 @@ output "cognito_authorizer_id" {
 output "spa_bucket_name" {
   value = aws_s3_bucket.vswir_plants_config.id
 }
+
+output "config_bucket_name" {
+  value = aws_s3_bucket.vswir_plants_config.id
+}
+
+output "config_bucket_arn" {
+  value = aws_s3_bucket.vswir_plants_config.arn
+}

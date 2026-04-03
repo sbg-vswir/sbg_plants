@@ -13,15 +13,17 @@ import { listIsofitJobs } from '../utils/api';
 const LIMIT_OPTIONS = [3, 5, 10, 20];
 
 const STATUS_CHIP = {
-  running:  { color: 'warning', label: 'Stale' },  // running but not active = stale
-  complete: { color: 'success', label: 'Complete' },
-  failed:   { color: 'error',   label: 'Failed' },
+  submitted: { color: 'default', label: 'Submitted' },
+  running:   { color: 'warning', label: 'Running' },
+  inverting: { color: 'warning', label: 'Inverting' },
+  complete:  { color: 'success', label: 'Complete' },
+  failed:    { color: 'error',   label: 'Failed' },
+  partial:   { color: 'warning', label: 'Partial' },
+  unknown:   { color: 'default', label: 'Unknown' },
 };
 
 function JobCard({ job, isActive, onMonitor }) {
-  // If not the active job and status is running, show as stale
-  const displayStatus = (!isActive && job.status === 'running') ? 'running' : job.status;
-  const chip = STATUS_CHIP[displayStatus] ?? { color: 'default', label: displayStatus };
+  const chip = STATUS_CHIP[job.status] ?? { color: 'default', label: job.status };
 
   return (
     <Paper

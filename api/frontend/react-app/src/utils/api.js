@@ -54,34 +54,38 @@ export async function fetchParquet(view, filters, limit = null, offset = 0) {
 }
 
 /**
- * Start spectra extraction job
+ * Start spectra extraction job.
+ * spectraType: 'radiance' | 'reflectance'
  */
-export async function extractSpectra(pixelRangesBySensor) {
+export async function extractSpectra(pixelRangesBySensor, spectraType = 'radiance') {
+  const view = spectraType === 'reflectance' ? 'reflectance_view' : 'extracted_spectra_view';
+
   const jobEntries = await Promise.all(
     Object.entries(pixelRangesBySensor).map(async ([sensorKey, pixelRanges]) => {
       const [campaign, sensor] = sensorKey.split('|');
 
-      const metadata = await fetchParquet('extracted_metadata_view',
-      {"campaign_name": campaign,
-        "sensor_name": sensor,
+      // Both radiance and reflectance need wavelength/fwhm for column headers
+      const metadata = await fetchParquet('extracted_metadata_view', {
+        campaign_name: campaign,
+        sensor_name: sensor,
       });
 
-      // metadata is an array of rows — assuming one row per sensor
       const [wavelength_center, fwhm] = metadata.data[0];
-      
+
       const payload = {
-        view: 'extracted_spectra_view',
+        view,
         format: 'parquet',
-        filters: { "pixel_id": pixelRanges },
+        filters: { pixel_id: pixelRanges },
         metadata: {
           campaign_name: campaign,
           sensor_name: sensor,
-          "wavelength_center": wavelength_center,
-          "fwhm": fwhm
-        }
+          wavelength_center,
+          fwhm,
+          spectral_column: spectraType === 'reflectance' ? 'reflectance' : 'radiance',
+        },
       };
 
-      const response = await client.post('/views/extracted_spectra_view', payload);
+      const response = await client.post(`/views/${view}`, payload);
       return [sensorKey, response.data.job_id];
     })
   );

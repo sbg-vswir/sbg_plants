@@ -43,7 +43,7 @@ def submit_job(parent_job_id: str, pixel_ids: list, batch_index: int, campaign_n
         }
     )
     try:
-        batch.submit_job(
+        response = batch.submit_job(
             jobName=f"inversion-{job_id[:8]}",
             jobQueue=JOB_QUEUE,
             jobDefinition=JOB_DEFINITION,
@@ -52,8 +52,16 @@ def submit_job(parent_job_id: str, pixel_ids: list, batch_index: int, campaign_n
                     {"name": "PIXEL_IDS",      "value": ",".join(str(i) for i in pixel_ids)},
                     {"name": "CAMPAIGN_NAME",  "value": campaign_name},
                     {"name": "SENSOR_NAME",    "value": sensor_name},
+                    {"name": "JOB_ID",         "value": job_id},
                 ]
             }
+        )
+        # Store the Batch job ID so the status lambda can reconcile via batch.describe_jobs()
+        dynamodb.update_item(
+            TableName=JOB_TABLE,
+            Key={"job_id": {"S": job_id}},
+            UpdateExpression="SET batch_job_id = :b",
+            ExpressionAttributeValues={":b": {"S": response["jobId"]}},
         )
     except Exception as e:
         logger.error(f"batch.submit_job failed for job {job_id}: {e}")
@@ -117,7 +125,7 @@ def lambda_handler(event, context):
         Item={
             "job_id":       {"S": parent_job_id},
             "job_type":     {"S": "isofit_parent"},
-            "status":       {"S": "running"},
+            "status":       {"S": "submitted"},
             "submitted_by": {"S": submitted_by},
             "created_at":   {"S": created_at},
         }

@@ -6,7 +6,7 @@ import { pollJobStatus } from '../utils/api';
  * Only polls on an interval when isPolling is explicitly true.
  * Derived status is based on the summary data, not the polling state.
  */
-export function useIsoFitPolling(parentJobId, isPolling) {
+export function useIsoFitPolling(parentJobId, isPolling, pollInterval = 60000) {
   const [jobData, setJobData]       = useState(null);
   const [pollingError, setPollingError] = useState(null);
   const [lastUpdated, setLastUpdated]   = useState(null);
@@ -45,14 +45,17 @@ export function useIsoFitPolling(parentJobId, isPolling) {
 
     const poll = async () => {
       const result = await fetchOnce();
-      if (result && result.total_pixels_remaining === 0 && !result.restart_required) {
+      if (!result) return;
+      const statuses = Object.keys(result.statuses || {});
+      const allTerminal = statuses.length > 0 && statuses.every(s => s === 'complete' || s === 'failed');
+      if (allTerminal || (result.total_pixels_remaining === 0 && !result.restart_required)) {
         stopPolling();
       }
     };
 
-    intervalRef.current = setInterval(poll, 10000);
+    intervalRef.current = setInterval(poll, pollInterval);
     return stopPolling;
-  }, [isPolling, parentJobId, stopPolling, fetchOnce]);
+  }, [isPolling, parentJobId, pollInterval, stopPolling, fetchOnce]);
 
   // Derive status purely from data
   const deriveStatus = () => {
@@ -68,7 +71,7 @@ export function useIsoFitPolling(parentJobId, isPolling) {
 
   const derivedStatus = deriveStatus();
   const isComplete    = derivedStatus === 'complete';
-  const canPoll       = derivedStatus === 'in_progress' || derivedStatus === 'submitted';
+  const canPoll = derivedStatus === 'in_progress' || derivedStatus === 'submitted';
 
   return { jobData, pollingError, lastUpdated, isComplete, canPoll, derivedStatus, stopPolling, fetchOnce };
 }

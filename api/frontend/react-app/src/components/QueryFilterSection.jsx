@@ -19,6 +19,9 @@ export default function QueryFilterSection({
   onDownloadTable,
   downloadTableDisabled,
   hideExtract,
+  spectraType,
+  onSpectraTypeChange,
+  lockSpectraType,
 }) {
   return (
     <FilterSection
@@ -43,6 +46,9 @@ export default function QueryFilterSection({
       onViewChange={onViewChange}
       onReset={onReset}
       hideExtract={hideExtract}
+      spectraType={spectraType}
+      onSpectraTypeChange={onSpectraTypeChange}
+      lockSpectraType={lockSpectraType}
     />
   );
 }

@@ -74,11 +74,6 @@ variable "isofit_ecr_image" {
   type        = string
 }
 
-variable "isofit_ami_id" {
-  description = "AMI ID for the isofit EC2 batch worker (built with Packer)"
-  type        = string
-}
-
 variable "pixel_selection_ecr_image" {
   description = "ECR image URI for the pixel selection Lambda"
   type        = string

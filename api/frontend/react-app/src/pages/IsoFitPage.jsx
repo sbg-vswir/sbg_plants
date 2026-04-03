@@ -62,6 +62,9 @@ function IsoFitPage() {
               onDownloadTable={() => {}}
               downloadTableDisabled
               hideExtract={hideExtract}
+              spectraType="radiance"
+              onSpectraTypeChange={() => {}}
+              lockSpectraType
             />
 
             {query.loading && (

@@ -1,3 +1,12 @@
+terraform {
+  required_providers {
+    aws = {
+      source                = "hashicorp/aws"
+      configuration_aliases = [aws, aws.us_east_1]
+    }
+  }
+}
+
 #########################
 # Locals
 #########################
@@ -32,8 +41,8 @@ locals {
       local.content_type_map,
       # extract extension including the dot, lowercase
       length(regexall("(\\.[^./]+)$", f)) > 0
-        ? lower(regexall("(\\.[^./]+)$", f)[0][0])
-        : "",
+      ? lower(regexall("(\\.[^./]+)$", f)[0][0])
+      : "",
       "application/octet-stream"
     )
   }
@@ -79,10 +88,10 @@ resource "aws_s3_bucket_policy" "spa_bucket_policy" {
 # ACM certificate (must be us-east-1 for CloudFront)
 #########################
 resource "aws_acm_certificate" "domain_cert_us_east_1" {
-  provider          = aws.us_east_1
-  domain_name       = var.root_domain
+  provider                  = aws.us_east_1
+  domain_name               = var.root_domain
   subject_alternative_names = ["*.${var.root_domain}"]
-  validation_method = "DNS"
+  validation_method         = "DNS"
 
   lifecycle {
     create_before_destroy = true
@@ -99,12 +108,12 @@ resource "aws_route53_record" "cert_validation" {
     }
   }
 
-  allow_overwrite = true   # add this
-  zone_id = data.aws_route53_zone.zone.id
-  name    = each.value.name
-  type    = each.value.type
-  records = [each.value.record]
-  ttl     = 60
+  allow_overwrite = true # add this
+  zone_id         = data.aws_route53_zone.zone.id
+  name            = each.value.name
+  type            = each.value.type
+  records         = [each.value.record]
+  ttl             = 60
 }
 
 resource "aws_acm_certificate_validation" "domain_cert_us_east_1" {
@@ -125,10 +134,10 @@ data "aws_route53_zone" "zone" {
 # CloudFront OAC
 #########################
 resource "aws_cloudfront_origin_access_control" "spa_oac" {
-  name                      = "${var.spa_subdomain}-oac"
+  name                              = "${var.spa_subdomain}-oac"
   origin_access_control_origin_type = "s3"
-  signing_protocol          = "sigv4"
-  signing_behavior          = "always"
+  signing_protocol                  = "sigv4"
+  signing_behavior                  = "always"
 }
 
 #########################

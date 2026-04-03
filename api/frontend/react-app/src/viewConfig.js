@@ -101,6 +101,25 @@ const ENUMS = {
     'Individual', 'Transect', 'Plot', 'Clip strip',
   ],
 
+  cloudy_conditions: [
+    'Red', 'Yellow', 'Green', 'Not recorded',
+  ],
+
+  cloud_type: [
+    'Clear Sky', 'Haze', 'Cirrus', 'Cirrus - sun not obscured', 'Cirrus - sun obscured',
+    'Cirrus / Clear', 'Cumulus', 'Cumulus - sun not obscured', 'Cumulus - sun obscured',
+    'Cumulus / Clear', 'Cumulus / Cirrus', 'Stratus', 'Stratus - sun not obscured',
+    'Stratus - sun obscured', 'Complete stratus cover', 'Unknown cloud type', 'Not collected',
+  ],
+
+  extraction_method: [
+    'Internal centroids', 'Full intersection', 'Buffer',
+  ],
+
+  delineation_method: [
+    'Posthoc', 'Radius Buffer', 'In Field',
+  ],
+
   handling: [
     'Fresh', 'Flash frozen', 'Oven dried',
   ],
@@ -127,16 +146,23 @@ export const VIEW_CONFIG = {
     queryable: true,
     displayName: 'Spectra',
     filters: [
-      { id: 'plot_name',     label: 'Plot Name:',     type: 'text', placeholder: 'e.g., 276-ER18,001-ER18' },
-      { id: 'campaign_name', label: 'Campaign Name:', type: 'text', placeholder: 'e.g., East River 2018' },
-      { id: 'sensor_name',   label: 'Sensor Name:',   type: 'enum', options: ENUMS.sensor_name },
-      { id: 'granule_id',    label: 'Granule ID:',    type: 'text', placeholder: 'e.g., NIS01_20180621_172130' },
-      { id: 'start_date',    label: 'Start Date:',    type: 'date' },
-      { id: 'end_date',      label: 'End Date:',      type: 'date' },
+      { id: 'plot_name',                label: 'Plot Name:',              type: 'text', placeholder: 'e.g., 276-ER18,001-ER18' },
+      { id: 'campaign_name',            label: 'Campaign Name:',          type: 'text', placeholder: 'e.g., East River 2018' },
+      { id: 'sensor_name',              label: 'Sensor Name:',            type: 'enum', options: ENUMS.sensor_name },
+      { id: 'granule_id',               label: 'Granule ID:',             type: 'text', placeholder: 'e.g., NIS01_20180621_172130' },
+      { id: 'cloudy_conditions',        label: 'Cloud Conditions:',       type: 'enum', options: ENUMS.cloudy_conditions },
+      { id: 'cloud_type',               label: 'Cloud Type:',             type: 'enum', options: ENUMS.cloud_type },
+      { id: 'extraction_method',        label: 'Extraction Method:',      type: 'enum', options: ENUMS.extraction_method },
+      { id: 'delineation_method',       label: 'Delineation Method:',     type: 'enum', options: ENUMS.delineation_method },
+      { id: 'shape_aligned_to_granule', label: 'Shape Aligned to Granule:', type: 'text', placeholder: 'true or false' },
+      { id: 'start_date',               label: 'Start Date:',             type: 'date' },
+      { id: 'end_date',                 label: 'End Date:',               type: 'date' },
     ],
     select: [
       'plot_name', 'campaign_name', 'sensor_name', 'granule_id',
-      'granule_date', 'pixel_ids', 'geom',
+      'granule_date', 'acquisition_date', 'cloudy_conditions', 'cloud_type',
+      'gsd', 'extraction_method', 'delineation_method', 'shape_aligned_to_granule',
+      'pixel_ids', 'geom',
     ],
   },
 
@@ -165,7 +191,7 @@ export const VIEW_CONFIG = {
       { id: 'end_date',            label: 'End Date:',            type: 'date' },
     ],
     select: [
-      'campaign_name', 'site_id', 'plot_name', 'sample_name', 'collection_date',
+      'campaign_name', 'plot_id', 'site_id', 'plot_name', 'sample_name', 'collection_date',
       'trait', 'value', 'units', 'method', 'handling', 'error', 'error_type',
       'taxa', 'veg_or_cover_type', 'phenophase', 'sample_fc_class',
       'sample_fc_percent', 'canopy_position', 'plant_status', 'plot_veg_type', 'subplot_cover_method',
@@ -176,7 +202,13 @@ export const VIEW_CONFIG = {
   extracted_spectra_view: {
     queryable: false,
     filters: [],
-    select: ['pixel_id'],
+    select: ['pixel_id', 'campaign_name', 'sensor_name', 'granule_id', 'plot_id', 'plot_name', 'shade_mask'],
+  },
+
+  reflectance_view: {
+    queryable: false,
+    filters: [],
+    select: ['pixel_id', 'campaign_name', 'sensor_name', 'granule_id', 'plot_id', 'plot_name', 'lon', 'lat', 'elevation', 'cloudy_conditions', 'cloud_type'],
   },
 
   extracted_metadata_view: {

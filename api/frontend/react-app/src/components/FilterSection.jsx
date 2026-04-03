@@ -28,6 +28,9 @@ function FilterSection({
   extractDisabled,
   downloadTableDisabled,
   extractLabel = 'Extract Spectra',
+  spectraType = 'radiance',
+  onSpectraTypeChange,
+  lockSpectraType = false,
   // view selector
   view,
   views,
@@ -136,7 +139,7 @@ function FilterSection({
       </Box>
 
       {/* Action Buttons */}
-      <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ rowGap: 1.5 }}>
+      <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap sx={{ rowGap: 1.5 }} alignItems="center">
         <Button
           variant="contained"
           startIcon={<FilterIcon />}
@@ -154,14 +157,30 @@ function FilterSection({
           Next {pageSize}
         </Button>
         {!hideExtract && (
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={onExtractSpectra}
-            disabled={extractDisabled || loading}
-          >
-            {extractLabel}
-          </Button>
+          <>
+            <ToggleButtonGroup
+              value={spectraType}
+              exclusive
+              onChange={(_, val) => { if (val && onSpectraTypeChange) onSpectraTypeChange(val); }}
+              size="small"
+              disabled={lockSpectraType}
+            >
+              <ToggleButton value="radiance" sx={{ textTransform: 'none', px: 2 }}>
+                Radiance
+              </ToggleButton>
+              <ToggleButton value="reflectance" sx={{ textTransform: 'none', px: 2 }}>
+                Reflectance
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={onExtractSpectra}
+              disabled={extractDisabled || loading}
+            >
+              {extractLabel}
+            </Button>
+          </>
         )}
         <Button
           variant="outlined"

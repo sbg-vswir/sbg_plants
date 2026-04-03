@@ -14,6 +14,7 @@ tunnel.sh
 shift/
 isofit/
 .pixi/
+connect.sh
 
 # Dependencies
 node_modules/

@@ -178,13 +178,11 @@ resource "aws_iam_role_policy" "batch_job_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        # read db credentials from secrets manager
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = aws_secretsmanager_secret.isofit_user.arn
       },
       {
-        # write job status and attempt history to dynamo
         Effect = "Allow"
         Action = [
           "dynamodb:PutItem",
@@ -192,6 +190,17 @@ resource "aws_iam_role_policy" "batch_job_policy" {
           "dynamodb:GetItem"
         ]
         Resource = var.dynamodb_table_arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          var.config_bucket_arn,
+          "${var.config_bucket_arn}/isofit-app/*"
+        ]
       }
     ]
   })
@@ -338,23 +347,9 @@ resource "aws_security_group_rule" "worker_to_db" {
 
 }
 
-# ── ECS-optimized AMI — pre-installed with Docker and ECS agent ───────────────
-data "aws_ami" "ecs_optimized" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["al2023-ami-ecs-hvm-2023.*-x86_64"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-}
-
-# ── Launch template — optional, uncomment to override EBS volume size ─────────
+# ── Launch template — ensures sufficient EBS for the isofit Docker image ──────
+# The isofit image is ~13GB. Default ECS AMI root volume is 30GB which is
+# too tight once OS + Docker overhead is included.
 resource "aws_launch_template" "batch_worker" {
   name = "vswir-plants-batch-worker"
 
@@ -371,8 +366,8 @@ resource "aws_launch_template" "batch_worker" {
 }
 
 # ── Batch Compute Environment ─────────────────────────────────────────────────
-# EC2 Spot — uses ECS-optimized AMI. Docker and ECS agent pre-installed.
-# isofit ECR image is pulled and cached on the instance after first job.
+# EC2 Spot — uses stock ECS-optimised AL2023 AMI. The isofit Docker image
+# is pulled on first job and cached on the instance for subsequent jobs.
 
 resource "aws_batch_compute_environment" "worker" {
   name         = "isofit-compute"
@@ -394,8 +389,6 @@ resource "aws_batch_compute_environment" "worker" {
       "r5.large",
       "r5.xlarge",
     ]
-
-    image_id = data.aws_ami.ecs_optimized.id
 
     subnets            = var.private_subnets
     security_group_ids = [aws_security_group.worker.id]
@@ -452,7 +445,7 @@ resource "aws_batch_job_definition" "worker" {
 
   container_properties = jsonencode({
     image   = var.ecr_image
-    command = ["python", "/root/app/entrypoint.py"]
+    command = ["bash", "-c", "aws s3 sync s3://vswir-plants-config/isofit-app/ /root/app/ --region us-west-2 && python3 /root/app/entrypoint.py"]
 
     resourceRequirements = [
       { type = "VCPU", value = "1" },
@@ -484,39 +477,12 @@ resource "aws_batch_job_definition" "worker" {
     }
   })
 
-  # ── FARGATE version (kept for reference) ──────────────────────────────────
-  # platform_capabilities = ["FARGATE"]
-  # container_properties = jsonencode({
-  #   image = var.ecr_image
-  #   fargatePlatformConfiguration = { platformVersion = "LATEST" }
-  #   resourceRequirements = [
-  #     { type = "VCPU", value = "1" },
-  #     { type = "MEMORY", value = "8192" }
-  #   ]
-  #   ephemeralStorage = { sizeInGiB = 60 }
-  #   executionRoleArn = aws_iam_role.batch_execution_role.arn
-  #   jobRoleArn       = aws_iam_role.batch_job_role.arn
-  #   environment = [
-  #     { name = "DB_SECRET_ARN",  value = var.db_secret_arn },
-  #     { name = "DYNAMODB_TABLE", value = var.dynamodb_table_name },
-  #     { name = "AWS_REGION",     value = var.region },
-  #   ]
-  #   logConfiguration = {
-  #     logDriver = "awslogs"
-  #     options = {
-  #       awslogs-group         = "/batch/pixel-worker"
-  #       awslogs-region        = var.region
-  #       awslogs-stream-prefix = "batch"
-  #     }
-  #   }
-  # })
-
   retry_strategy {
     attempts = 2
   }
 
   timeout {
-    attempt_duration_seconds = 900
+    attempt_duration_seconds = 1500
   }
 
   tags = var.tags
