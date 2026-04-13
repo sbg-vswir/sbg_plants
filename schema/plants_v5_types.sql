@@ -136,7 +136,7 @@ CREATE TYPE vswir_plants."VEG_or_cover_type" AS ENUM (
 ); 
 
 CREATE TYPE vswir_plants."PLANT_status" AS ENUM (
-    -- 'OK',
+    -- 'OK', from neon data?
     'Insect damaged',
     'Disease damaged',
     'Other damage',
@@ -171,9 +171,9 @@ CREATE TYPE vswir_plants."DELINEATION_method" AS ENUM (
 ); 
 
 CREATE TYPE vswir_plants."CLOUD_conditions" AS ENUM (
-    'Red',
-    'Yellow',
-    'Green',
+    'Red', -- over 33%
+    'Yellow', -- 10 to 33%
+    'Green', -- less than 10%
     'Not recorded'
 ); 
 
@@ -254,8 +254,8 @@ CREATE TYPE vswir_plants."Sensor_name" AS ENUM (
 );
 
 CREATE TYPE vswir_plants."Trait" AS ENUM (
-    'wet weight',
-    'dry weight',
+    'Wet weight',
+    'Dry weight',
     'LWC',
     'CRF',
     'Chl',

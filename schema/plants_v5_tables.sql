@@ -1,6 +1,4 @@
--- doi table, neon dois change on a yearly basis
-    -- drop down for what the data are
-    -- one campaign many dois
+-- multiple taxa_systems, varchar array or list multiple in the one column
 CREATE TABLE vswir_plants.campaign (
     campaign_name VARCHAR PRIMARY KEY,
     primary_funding_source VARCHAR NOT NULL,
@@ -9,7 +7,20 @@ CREATE TABLE vswir_plants.campaign (
     taxa_system VARCHAR
 );
 
+-- doi table, neon dois change on a yearly basis
+-- one campaign many dois
+-- what level do we integrate dois, campaign, trait etc
+CREATE TABLE vswir_plants.doi (
+    campaign_name VARCHAR PRIMARY KEY,
+    doi VARCHAR,
+    CONSTRAINT doi_campaign_key FOREIGN KEY (campaign_name)
+        REFERENCES vswir_plants.campaign(campaign_name)
+        ON DELETE CASCADE,
+    CONSTRAINT sensor_campaign_pk PRIMARY KEY (doi)
+);
+
 -- elevation source does it need a version?
+-- add a column(s) for isofit configs either the file name or the s3 path
 CREATE TABLE vswir_plants.sensor_campaign (
     campaign_name VARCHAR NOT NULL,
     sensor_name vswir_plants."Sensor_name" NOT NULL,
@@ -33,6 +44,9 @@ CREATE TABLE vswir_plants.plot (
         ON DELETE CASCADE
 );
 
+-- a column to specify map space and raw space
+-- switch cloud condtion columns to use percentage and translate neon data to use that
+-- confidence on alignment column, categorical so this would require an enum
 CREATE TABLE vswir_plants.granule (
     granule_id VARCHAR PRIMARY KEY,
     campaign_name VARCHAR NOT NULL,
@@ -51,9 +65,18 @@ CREATE TABLE vswir_plants.granule (
         ON DELETE CASCADE
 );
 
+-- Switch plot shape geom to be Geometry 4326
+
+-- look into performance considerations how would this work with the index
+-- I did not see any reason this would impact performance
+
+-- look at the database_api backend to see how the queries are done and if there is performance considerations
+-- I believe this would work with the current database_api
+
 CREATE TABLE vswir_plants.plot_shape ( 
     plot_shape_id SERIAL PRIMARY KEY,
-    geom geometry(POLYGON, 4326) NOT NULL 
+    geom geometry(GEOMETRY, 4326) NOT NULL 
+    -- geom geometry(POLYGON, 4326) NOT NULL 
 );
     
 CREATE INDEX plot_shape_idx ON vswir_plants.plot_shape USING GIST (geom);
@@ -77,7 +100,8 @@ CREATE TABLE vswir_plants.plot_raster_intersect (
     CONSTRAINT plot_raster_intersect_pk PRIMARY KEY (plot_id, granule_id)
 );
 
-
+-- not all data might have the glt row and column??
+-- how do we want to store coords here? should we use do a geometry column to enforce crs?
 CREATE TABLE vswir_plants.pixel (
     pixel_id SERIAL PRIMARY KEY,
     plot_id INTEGER NOT NULL,
@@ -94,8 +118,8 @@ CREATE TABLE vswir_plants.pixel (
     slope FLOAT4 NOT NULL,
     aspect FLOAT4 NOT NULL,
     utc_time FLOAT4 NOT NULL,
-    cosine_i FLOAT4, -- needs to be not null in the future
-    raw_cosine_i FLOAT4, -- needs to be not null in the future
+    cosine_i FLOAT4 NOT NULL,
+    raw_cosine_i FLOAT4, -- needs to be not null in the future?
     lon FLOAT4 NOT NULL, 
     lat FLOAT4 NOT NULL,
     elevation FLOAT4 NOT NULL,
@@ -106,6 +130,7 @@ CREATE TABLE vswir_plants.pixel (
 CREATE UNIQUE INDEX pixel_idx ON vswir_plants.pixel (plot_id, granule_id, glt_row, glt_column);
 
 
+-- should I merge this into the pixel table?
 CREATE TABLE vswir_plants.extracted_spectra (
     pixel_id INTEGER NOT NULL,
     radiance FLOAT4[], 
@@ -115,7 +140,10 @@ CREATE TABLE vswir_plants.extracted_spectra (
     CONSTRAINT extracted_spectra_pk PRIMARY KEY (pixel_id)
 );
 
-CREATE TABLE vswir_plants.output_pixel_fc (
+-- support other types of outputs, cwc 
+-- change name to output_pixel_data_products?
+-- include reflectance
+CREATE TABLE vswir_plants.output_pixel_data_products (
     pixel_id INTEGER PRIMARY KEY, 
     fc_class vswir_plants."FRACTIONAL_class",
     fc_percentage FLOAT4 NOT NULL,
@@ -138,19 +166,14 @@ CREATE TABLE vswir_plants.output_pixel_rfl (
 CREATE TABLE vswir_plants.insitu_plot_event (
     plot_id INTEGER NOT NULL,
     collection_date DATE NOT NULL,
-    -- plot_shape_id INTEGER NOT NULL,
     plot_veg_type vswir_plants."VEGETATION_type" NOT NULL,
     subplot_cover_method vswir_plants."SUBPLOT_cover_method" NOT NULL,
     floristic_survey BOOLEAN NOT NULL,
     CONSTRAINT insitu_plot_event_plot_fkey FOREIGN KEY (plot_id)
         REFERENCES vswir_plants.plot(plot_id) 
         ON DELETE CASCADE,
-    -- CONSTRAINT insitu_plot_event_plot_shape_fkey FOREIGN KEY (plot_shape_id)
-    --     REFERENCES vswir_plants.plot_shape(plot_shape_id) 
-    --     ON DELETE CASCADE,
     CONSTRAINT insitu_plot_event_pk PRIMARY KEY (plot_id, collection_date)
 );
-
 
 CREATE TABLE vswir_plants.sample (
     collection_date DATE NOT NULL, 
@@ -181,8 +204,23 @@ CREATE TABLE vswir_plants.leaf_traits (
     units vswir_plants."Trait_units" NOT NULL,
     error FLOAT4,
     error_type vswir_plants."Error_type",
+    doi VARCHAR, 
     CONSTRAINT sample_table_fkey FOREIGN KEY (plot_id, collection_date, sample_name)
         REFERENCES vswir_plants.sample (plot_id, collection_date, sample_name)
         ON DELETE CASCADE,
+    CONSTRAINT leaf_trait_protocol_key FOREIGN KEY (doi)
+        REFERENCES vswir_plants.doi (doi)
+        ON DELETE CASCADE,
     CONSTRAINT leaf_trait_pk PRIMARY KEY (plot_id, collection_date, sample_name, trait)
+);
+
+-- move things from traits to trait protocols?
+-- make a seperate table for trait methods which have protocols, this could be linked to the doi table??
+-- link back to the trait table
+CREATE TABLE vswir_plants.leaf_trait_protocols (
+    doi VARCHAR,
+    CONSTRAINT leaf_trait_protocol_doi_key FOREIGN KEY (doi)
+        REFERENCES vswir_plants.doi(doi)
+        ON DELETE CASCADE,
+    CONSTRAINT sensor_campaign_pk PRIMARY KEY(doi)
 );
