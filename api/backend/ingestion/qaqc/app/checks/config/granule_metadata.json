@@ -1,0 +1,30 @@
+{
+  "required_cols": [
+    "granule_id",
+    "campaign_name",
+    "sensor_name",
+    "acquisition_date",
+    "acquisition_start_time",
+    "cloudy_conditions",
+    "cloud_type",
+    "gsd",
+    "raster_epsg"
+  ],
+  "nullable_cols": [
+    "flightline_id",
+    "granule_rad_url",
+    "granule_refl_url"
+  ],
+  "enum_cols": {
+    "sensor_name":       "Sensor_name",
+    "cloudy_conditions": "CLOUD_conditions",
+    "cloud_type":        "CLOUD_type"
+  },
+  "type_cols": {
+    "acquisition_date":       "date",
+    "acquisition_start_time": "time",
+    "gsd":                    "float",
+    "raster_epsg":            "int"
+  },
+  "pk_cols": ["granule_id"]
+}

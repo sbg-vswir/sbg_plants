@@ -1,0 +1,49 @@
+{
+  "required_cols": [
+    "plot_name",
+    "campaign_name",
+    "collection_date",
+    "plot_veg_type",
+    "subplot_cover_method",
+    "floristic_survey",
+    "sample_name",
+    "taxa",
+    "veg_or_cover_type",
+    "phenophase",
+    "sample_fc_class",
+    "sample_fc_percent",
+    "plant_status",
+    "canopy_position",
+    "trait",
+    "value",
+    "method",
+    "handling",
+    "units"
+  ],
+  "nullable_cols": [
+    "error",
+    "error_type"
+  ],
+  "enum_cols": {
+    "plot_veg_type":        "VEGETATION_type",
+    "subplot_cover_method": "SUBPLOT_cover_method",
+    "taxa":                 "TAXA",
+    "veg_or_cover_type":    "VEG_or_cover_type",
+    "phenophase":           "PHENOPHASE",
+    "sample_fc_class":      "FRACTIONAL_class",
+    "plant_status":         "PLANT_status",
+    "canopy_position":      "CANOPY_position",
+    "trait":                "Trait",
+    "method":               "Trait_method",
+    "handling":             "Sample_handling",
+    "units":                "Trait_units",
+    "error_type":           "Error_type"
+  },
+  "type_cols": {
+    "collection_date":   "date",
+    "value":             "float",
+    "sample_fc_percent": "float",
+    "floristic_survey":  "bool"
+  },
+  "pk_cols": ["plot_name", "campaign_name", "collection_date", "sample_name", "trait"]
+}

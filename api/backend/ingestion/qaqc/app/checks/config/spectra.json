@@ -1,0 +1,36 @@
+{
+  "_comment": "Band columns (integer-named: 0, 1, 2, ...) are dynamic and cannot be enumerated here. The SpectaCheck subclass handles them. known_cols lists all non-band required columns; extra-column warnings will skip integer-named columns.",
+  "required_cols": [
+    "plot_name",
+    "campaign_name",
+    "sensor_name",
+    "granule_id",
+    "glt_row",
+    "glt_column",
+    "lon",
+    "lat",
+    "elevation",
+    "shade_mask",
+    "path_length",
+    "to_sensor_azimuth",
+    "to_sensor_zenith",
+    "to_sun_azimuth",
+    "to_sun_zenith",
+    "solar_phase",
+    "slope",
+    "aspect",
+    "utc_time",
+    "cosine_i"
+  ],
+  "nullable_cols": ["raw_cosine_i"],
+  "enum_cols": {},
+  "type_cols": {
+    "lon":        "float",
+    "lat":        "float",
+    "elevation":  "float",
+    "glt_row":    "int",
+    "glt_column": "int",
+    "cosine_i":   "float"
+  },
+  "pk_cols": []
+}

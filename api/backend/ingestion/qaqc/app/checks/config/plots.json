@@ -1,0 +1,25 @@
+{
+  "_comment": "plots.geojson is a GeoJSON FeatureCollection. The base class skips DataFrame checks for GeoJSON. This config declares known feature properties so the check subclass can reference them for extra-property warnings.",
+  "required_props": [
+    "plot_name",
+    "campaign_name",
+    "site_id",
+    "granule_id",
+    "extraction_method",
+    "delineation_method",
+    "shape_aligned_to_granule"
+  ],
+  "nullable_props": [
+    "plot_method"
+  ],
+  "enum_props": {
+    "extraction_method":  "EXTRACTION_method",
+    "delineation_method": "DELINEATION_method",
+    "plot_method":        "PLOT_method"
+  },
+  "required_cols": [],
+  "nullable_cols": [],
+  "enum_cols": {},
+  "type_cols": {},
+  "pk_cols": []
+}

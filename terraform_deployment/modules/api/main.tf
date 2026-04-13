@@ -215,6 +215,7 @@ resource "aws_apigatewayv2_api" "vswir_plants" {
     allow_methods = [
       "GET",
       "POST",
+      "PUT",
       "OPTIONS",
       "DELETE"
     ]
@@ -314,6 +315,21 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "vswir_plants_conf
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
+  }
+}
+
+resource "aws_s3_bucket_cors_configuration" "vswir_plants_config" {
+  bucket = aws_s3_bucket.vswir_plants_config.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT", "GET"]
+    allowed_origins = [
+      "https://plants.airborne.smce.nasa.gov",
+      "http://localhost:3000",
+    ]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3600
   }
 }
 

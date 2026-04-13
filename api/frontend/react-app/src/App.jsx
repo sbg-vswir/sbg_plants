@@ -73,7 +73,7 @@ function App() {
       <Route
         path="/ingest"
         element={
-          <RequireRole check={isAdmin}>
+          <RequireRole check={isSuperAdmin}>
             <IngestPage />
           </RequireRole>
         }

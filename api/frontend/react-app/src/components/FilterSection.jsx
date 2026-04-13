@@ -88,13 +88,19 @@ function FilterSection({
             return (
               <Autocomplete
                 key={filter.id}
+                multiple
                 options={filter.options}
-                value={filterValues[filter.id] || null}
+                value={filterValues[filter.id] || []}
                 onChange={(e, newValue) => onFilterChange(filter.id, newValue)}
                 renderInput={(params) => (
                   <TextField {...params} label={filter.label} size="small" />
                 )}
-                freeSolo
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => {
+                    const { key, ...tagProps } = getTagProps({ index });
+                    return <Chip key={key} label={option} size="small" {...tagProps} />;
+                  })
+                }
                 fullWidth
               />
             );

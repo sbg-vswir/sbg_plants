@@ -6,13 +6,14 @@ export function useSpectraExtraction(getPixelRanges, setError, setExtractDisable
   const [jobsBySensor, setJobsBySensor] = useState({});
   const [isPolling, setIsPolling]       = useState(false);
   const [spectraType, setSpectraType]   = useState('radiance'); // 'radiance' | 'reflectance'
-  const { sensorStatuses }              = useJobPolling(jobsBySensor, isPolling);
+  const { sensorStatuses, resetStatuses } = useJobPolling(jobsBySensor, isPolling);
 
   const handleExtractSpectra = async () => {
     setError(null);
     try {
       const pixelRangesBySensor = await getPixelRanges();
       const jobs = await extractSpectra(pixelRangesBySensor, spectraType);
+      resetStatuses();
       setJobsBySensor(jobs);
       setIsPolling(true);
       setExtractDisabled(true);
@@ -22,6 +23,7 @@ export function useSpectraExtraction(getPixelRanges, setError, setExtractDisable
   };
 
   const reset = () => {
+    resetStatuses();
     setJobsBySensor({});
     setIsPolling(false);
   };

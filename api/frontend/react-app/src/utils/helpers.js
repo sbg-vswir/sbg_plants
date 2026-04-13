@@ -74,12 +74,18 @@ export function parseFilters(filterValues, geojsonContent) {
   
   Object.keys(filterValues).forEach(key => {
     const value = filterValues[key];
-    if (value) {
-      if (key === 'plot_name') {
-        filters[key] = value.split(',').map(p => p.trim());
-      } else {
-        filters[key] = value;
-      }
+    // Skip empty values: null, undefined, empty string, or empty array
+    if (!value || (Array.isArray(value) && value.length === 0)) return;
+    if (key === 'plot_name') {
+      // plot_name may still arrive as a comma-separated string (text field)
+      filters[key] = Array.isArray(value)
+        ? value
+        : value.split(',').map(p => p.trim());
+    } else if (Array.isArray(value)) {
+      // Multi-select enum: pass the array directly
+      filters[key] = value;
+    } else {
+      filters[key] = value;
     }
   });
 

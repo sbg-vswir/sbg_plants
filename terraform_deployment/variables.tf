@@ -83,3 +83,44 @@ variable "bastion_public_key" {
   description = "Public key for bastion SSH key pair"
   type        = string
 }
+
+variable "ingest_trigger_image_uri" {
+  description = "ECR image URI for the ingest trigger Lambda"
+  type        = string
+}
+
+variable "qaqc_image_uri" {
+  description = "ECR image URI for the QAQC Lambda"
+  type        = string
+}
+
+variable "promotion_image_uri" {
+  description = "ECR image URI for the promotion Lambda"
+  type        = string
+}
+
+variable "ingestion_staging_user" {
+  description = "Username for the ingestion_staging DB user"
+  type        = string
+}
+
+variable "ingestion_staging_password" {
+  description = "Password for the ingestion_staging DB user"
+  type        = string
+  sensitive   = true
+}
+
+variable "ingestion_promotion_user" {
+  description = "Username for the ingestion_promotion DB user"
+  type        = string
+}
+
+variable "ingestion_promotion_password" {
+  description = "Password for the ingestion_promotion DB user"
+  type        = string
+  sensitive   = true
+}
+
+variable "rejection_image_uri" {
+  description = "ECR image URI for the rejection Lambda"
+}

@@ -1,0 +1,20 @@
+{
+  "required_cols": [
+    "campaign_name",
+    "primary_funding_source",
+    "sensor_name",
+    "elevation_source"
+  ],
+  "nullable_cols": [
+    "data_repository",
+    "doi",
+    "taxa_system"
+  ],
+  "enum_cols": {
+    "data_repository":  "Repository",
+    "sensor_name":      "Sensor_name",
+    "elevation_source": "ELEVATION_source"
+  },
+  "type_cols": {},
+  "pk_cols": ["campaign_name", "sensor_name"]
+}

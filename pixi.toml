@@ -10,4 +10,6 @@ python = ">=3.11"
 pandas = ">=2.0"
 psycopg2 = ">=2.9"
 boto3 = "*"
-
+earthaccess = "*"
+pyproj = "*"
+geopandas = "*"

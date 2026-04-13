@@ -119,3 +119,31 @@ module "isofit_pipeline" {
   config_bucket_name        = module.api.config_bucket_name
   config_bucket_arn         = module.api.config_bucket_arn
 }
+
+module "ingestion" {
+  source = "./modules/ingestion"
+
+  vpc_id                       = module.network.vpc_id
+  private_subnet_ids           = local.private_subnet_ids
+  api_id                       = module.api.api_id
+  api_execution_arn            = module.api.api_execution_arn
+  cognito_authorizer_id        = module.api.cognito_authorizer_id
+  dynamodb_table_arn           = module.api.export_jobs_table_arn
+  dynamodb_table_name          = module.api.export_jobs_table_name
+  config_bucket_name           = module.api.config_bucket_name
+  config_bucket_arn            = module.api.config_bucket_arn
+  db_security_group_id         = module.rds.db_security_group_id
+  db_host                      = module.rds.db_instance_endpoint
+  db_name                      = var.db_name
+  db_port                      = var.db_port
+  ingestion_staging_user       = var.ingestion_staging_user
+  ingestion_staging_password   = var.ingestion_staging_password
+  ingestion_promotion_user     = var.ingestion_promotion_user
+  ingestion_promotion_password = var.ingestion_promotion_password
+  ingest_trigger_image_uri     = var.ingest_trigger_image_uri
+  qaqc_image_uri               = var.qaqc_image_uri
+  promotion_image_uri          = var.promotion_image_uri
+  rejection_image_uri          = var.rejection_image_uri
+  region                       = var.region
+  tags                         = var.tags
+}

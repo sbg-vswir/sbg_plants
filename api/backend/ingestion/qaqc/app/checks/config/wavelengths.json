@@ -1,0 +1,17 @@
+{
+  "required_cols": [
+    "campaign_name",
+    "sensor_name",
+    "band",
+    "wavelength",
+    "fwhm"
+  ],
+  "nullable_cols": [],
+  "enum_cols": {},
+  "type_cols": {
+    "band":       "int",
+    "wavelength": "float",
+    "fwhm":       "float"
+  },
+  "pk_cols": ["campaign_name", "sensor_name", "band"]
+}

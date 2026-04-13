@@ -138,26 +138,53 @@ export async function listIsofitJobs(limit = 5) {
   return response.data.jobs;
 }
 
+// DynamoDB uses job_id as the primary key — normalize to batch_id for the frontend
+function normalizeBatch(batch) {
+  if (batch && batch.job_id && !batch.batch_id) {
+    batch.batch_id = batch.job_id;
+  }
+  return batch;
+}
+
 /**
  * Ingestion API calls
  */
 export const ingestApi = {
-  // Upload a bundle of 6 files — returns { batch_id }
-  submitBatch: (files) => {
-    const form = new FormData();
-    Object.entries(files).forEach(([key, file]) => form.append(key, file));
-    return client.post('/ingest', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }).then(r => r.data);
+  // Get bundle file slot definitions from S3-backed config
+  getConfig: () =>
+    client.get('/ingest/config').then(r => r.data),
+
+  // Upload a bundle of files via presigned S3 URLs — returns { batch_id }
+  submitBatch: async (files) => {
+    // 1. Request presigned PUT URLs + a batch_id from the Lambda
+    const { batch_id, upload_urls } = await client.post('/ingest/upload-urls').then(r => r.data);
+
+    // 2. Upload each file directly to S3 (bypasses API Gateway size limit)
+    await Promise.all(
+      Object.entries(upload_urls).map(([slot, url]) => {
+        const file = files[slot];
+        if (!file) throw new Error(`Missing file for slot: ${slot}`);
+        return fetch(url, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': 'application/octet-stream' },
+        }).then(res => {
+          if (!res.ok) throw new Error(`S3 upload failed for slot '${slot}': ${res.status}`);
+        });
+      })
+    );
+
+    // 3. Notify the Lambda that files are ready — creates DynamoDB record + invokes QAQC
+    return client.post('/ingest', { batch_id }).then(r => r.data);
   },
 
   // List all batches for the current user
   listBatches: () =>
-    client.get('/ingest').then(r => r.data),
+    client.get('/ingest').then(r => r.data.map(normalizeBatch)),
 
   // Get a single batch — includes qaqc_report
   getBatch: (batchId) =>
-    client.get(`/ingest/${batchId}`).then(r => r.data),
+    client.get(`/ingest/${batchId}`).then(r => normalizeBatch(r.data)),
 
   // Approve a QAQC_PASS batch
   approveBatch: (batchId) =>
@@ -166,4 +193,24 @@ export const ingestApi = {
   // Reject a batch
   rejectBatch: (batchId) =>
     client.post(`/ingest/${batchId}/reject`).then(r => r.data),
+
+  // Replace a single file slot on a QAQC_FAIL batch via presigned S3 URL
+  replaceFile: async (batchId, slot, file) => {
+    // 1. Get a presigned PUT URL for this slot
+    const { upload_url } = await client.get(`/ingest/${batchId}/file/${slot}/upload-url`).then(r => r.data);
+
+    // 2. Upload directly to S3
+    const res = await fetch(upload_url, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+    if (!res.ok) throw new Error(`S3 upload failed for slot '${slot}': ${res.status}`);
+
+    return { slot, replaced: true };
+  },
+
+  // Re-trigger QAQC on a QAQC_FAIL batch after files have been corrected
+  recheckBatch: (batchId) =>
+    client.post(`/ingest/${batchId}/recheck`).then(r => r.data),
 };

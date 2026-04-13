@@ -1,0 +1,10 @@
+{
+  "file_slots": {
+    "campaign_metadata": ".csv",
+    "wavelengths":        ".csv",
+    "granule_metadata":   ".csv",
+    "plots":              ".geojson",
+    "traits":             ".csv",
+    "spectra":            ".csv"
+  }
+}

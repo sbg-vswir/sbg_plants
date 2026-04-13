@@ -47,6 +47,7 @@ CREATE TABLE vswir_plants.plot (
 -- a column to specify map space and raw space
 -- switch cloud condtion columns to use percentage and translate neon data to use that
 -- confidence on alignment column, categorical so this would require an enum
+-- remove raster_epsg everything has to be wgs 84/ epsg 4326
 CREATE TABLE vswir_plants.granule (
     granule_id VARCHAR PRIMARY KEY,
     campaign_name VARCHAR NOT NULL,
@@ -72,7 +73,7 @@ CREATE TABLE vswir_plants.granule (
 
 -- look at the database_api backend to see how the queries are done and if there is performance considerations
 -- I believe this would work with the current database_api
-
+-- 1 plot can have many shapes?  1 plot event can have 1 shape? should we try to bring a key here to force a stronger uniquess constraint
 CREATE TABLE vswir_plants.plot_shape ( 
     plot_shape_id SERIAL PRIMARY KEY,
     geom geometry(GEOMETRY, 4326) NOT NULL 

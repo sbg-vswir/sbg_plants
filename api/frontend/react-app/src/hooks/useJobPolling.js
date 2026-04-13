@@ -1,9 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { pollJobStatus } from '../utils/api';
 
 export function useJobPolling(jobsBySensor, isPolling) {
   const [sensorStatuses, setSensorStatuses] = useState({});
   const intervalsRef = useRef({});
+
+  const resetStatuses = useCallback(() => {
+    setSensorStatuses({});
+  }, []);
 
   useEffect(() => {
     Object.values(intervalsRef.current).forEach(clearInterval);
@@ -57,5 +61,5 @@ export function useJobPolling(jobsBySensor, isPolling) {
     };
   }, [isPolling, jobsBySensor]);
 
-  return { sensorStatuses };
+  return { sensorStatuses, resetStatuses };
 }

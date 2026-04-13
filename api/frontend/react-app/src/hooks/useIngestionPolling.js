@@ -7,7 +7,7 @@ const POLL_INTERVAL_MS  = 5000;
 /**
  * Polls any batch that is PENDING or QAQC_RUNNING every 5 seconds.
  * Calls onUpdate(batch) whenever a batch status changes.
- * Stops automatically when all batches reach a terminal status.
+ * Restarts the interval whenever a batch transitions to an active status (e.g. after recheck).
  */
 export function useIngestionPolling(batches, onUpdate) {
   const intervalRef = useRef(null);
@@ -16,16 +16,18 @@ export function useIngestionPolling(batches, onUpdate) {
   // Keep ref in sync so the interval closure always sees the latest batches
   useEffect(() => { batchesRef.current = batches; }, [batches]);
 
+  // Track active batch IDs + statuses so we restart when a batch goes back to active
+  const activeKey = batches
+    .filter(b => !TERMINAL_STATUSES.has(b.status))
+    .map(b => `${b.batch_id}:${b.status}`)
+    .join(',');
+
   useEffect(() => {
     function stopPolling() {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-    }
-
-    function hasActiveBatches() {
-      return batchesRef.current.some(b => !TERMINAL_STATUSES.has(b.status));
     }
 
     async function poll() {
@@ -39,9 +41,11 @@ export function useIngestionPolling(batches, onUpdate) {
         active.map(async batch => {
           try {
             const updated = await ingestApi.getBatch(batch.batch_id);
-            if (updated.status !== batch.status) {
-              onUpdate(updated);
-            }
+            // Always call onUpdate — not just on status change — so that
+            // qaqc_report_presigned_url (regenerated on each GET /ingest/{id})
+            // propagates into state after a recheck that fails again with the
+            // same QAQC_FAIL status.
+            onUpdate(updated);
           } catch {
             // swallow individual poll errors — next tick will retry
           }
@@ -49,10 +53,10 @@ export function useIngestionPolling(batches, onUpdate) {
       );
     }
 
-    if (!hasActiveBatches()) return;
+    if (!activeKey) return;
 
     poll();
     intervalRef.current = setInterval(poll, POLL_INTERVAL_MS);
     return stopPolling;
-  }, [batches.map(b => b.batch_id).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 }
