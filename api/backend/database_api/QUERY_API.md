@@ -59,6 +59,7 @@ See `schema/VIEWS.md` for full column definitions.
   filtering, so they always reflect only the matched plots.
 - **All existing filterable columns supported** — existing filter machinery unchanged.
   Trait columns passed under `trait_filters`, granule columns under `granule_filters`.
+  `campaign_name` is the exception — passed at the top level, applied everywhere.
 - **Two independent date filters** — `collection_date` (sample collection) and
   `acquisition_date` (granule flight date) filtered separately.
 - **Multiple response formats** — `geoparquet`, `parquet`, `geojson`, `json`.
@@ -74,9 +75,11 @@ See `schema/VIEWS.md` for full column definitions.
 ### The 3 Stages
 
 **Stage 1 — Spatial filter**
-Query `plot_shape_view` with optional GeoJSON geometry and optional `campaign_name`.
-Returns all `plot_id`s whose shapes intersect the spatial filter. All matched plots
-proceed to Stage 2 regardless of whether they have traits or granules.
+Query `plot_shape_view` with optional GeoJSON geometry, optional `campaign_name` (top-level),
+and optional `sensor_name` (from `granule_filters`).
+Returns all `plot_id`s whose shapes intersect the spatial filter and belong to the
+specified campaign. All matched plots proceed to Stage 2 regardless of whether they
+have traits or granules.
 
 **Stage 2 — Parallel trait + granule queries**
 Two queries run against the `plot_id`s from Stage 1:
@@ -97,12 +100,12 @@ granule. Count queries run before limit is applied to get total counts.
 
 ```json
 {
+  "campaign_name": "East River 2018",
   "geojson": {
     "type": "Polygon",
     "coordinates": [[[...]]]
   },
   "trait_filters": {
-    "campaign_name":         "East River 2018",
     "trait":                 ["LMA", "Chl"],
     "taxa":                  ["Picea engelmannii"],
     "veg_or_cover_type":     ["PV"],
@@ -116,7 +119,6 @@ granule. Count queries run before limit is applied to get total counts.
     "collection_date_end":   "2018-08-31"
   },
   "granule_filters": {
-    "campaign_name":          "East River 2018",
     "sensor_name":            ["NEON AIS 1"],
     "cloudy_conditions":      ["Not recorded"],
     "cloud_type":             ["Not Collected"],
@@ -126,6 +128,18 @@ granule. Count queries run before limit is applied to get total counts.
   "limit":  100,
   "format": "geoparquet"
 }
+```
+
+### Fields
+
+| Field | Required | Description |
+|---|---|---|
+| `campaign_name` | No | Applied to all three stages — plots, traits, and granules |
+| `geojson` | No | GeoJSON geometry (Polygon or MultiPolygon). Omit for no spatial filter. |
+| `trait_filters` | No | Filters applied to trait data. All sub-fields optional. |
+| `granule_filters` | No | Filters applied to granule data. All sub-fields optional. |
+| `limit` | No | Max number of plots to return. Default 100. |
+| `format` | No | `"geoparquet"` (default), `"parquet"`, `"geojson"`, or `"json"`. |
 ```
 
 ### Response (`format: "geoparquet"`)

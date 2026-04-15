@@ -45,12 +45,12 @@ continues to work through `POST /query/{view_name}` — only the route path chan
 │ Navbar                                                   │
 ├──────────────────────┬──────────────────────────────────┤
 │ Filter Panel (380px) │ Map (flex-1)                      │
-│                      │                                   │
-│  Spatial             ├──────────────────────────────────┤
-│  - GeoJSON upload    │ Side Panel (slides in on click)   │
-│                      │  Plot identity                    │
-│  Trait filters       │  Traits for this plot             │
-│  - campaign          │  Granules for this plot           │
+│   General filter     │                                   │
+│   - campaign         ├──────────────────────────────────┤
+│   Spatial filter     │ Side Panel (slides in on click)   │
+│   - GeoJSON upload   │  Plot identity                    │
+│                      │  Traits for this plot             │
+│  Trait filters       │  Granules for this plot           │
 │  - trait             │  Extract Spectra button           │
 │  - taxa              ├──────────────────────────────────┤
 │  - veg/cover type    │ Table (two tabs)                  │

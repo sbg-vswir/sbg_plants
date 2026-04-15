@@ -14,6 +14,7 @@ response = requests.post(
     f"{API}/query",
     headers={"Authorization": f"Bearer {TOKEN}"},
     json={
+        "campaign_name": "East River 2018",
         "geojson": {"type": "Polygon", "coordinates": [[[...]]]},
         "trait_filters": {
             "trait": ["LMA"],
@@ -84,6 +85,7 @@ library(base64enc)
 resp <- request("https://your-api-gateway-url/query") |>
   req_auth_bearer_token("your-jwt-token") |>
   req_body_json(list(
+    campaign_name = "East River 2018",
     trait_filters = list(
       trait = list("LMA"),
       taxa  = list("Picea engelmannii"),

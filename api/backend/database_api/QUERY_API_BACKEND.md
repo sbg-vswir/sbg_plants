@@ -46,7 +46,7 @@ elif path.startswith("/query/"):
 `handle_view_query` is the existing single-query logic, unchanged except for receiving
 `view_name` as a parameter rather than reading it from `pathParameters`.
 
-`handle_linked_query` parses `geojson`, `trait_filters`, `granule_filters`, `limit`,
+`handle_linked_query` parses `campaign_name`, `geojson`, `trait_filters`, `granule_filters`, `limit`,
 `format` from the request body and calls `run_linked_query()` from `orchestration.py`.
 
 ---
@@ -54,14 +54,15 @@ elif path.startswith("/query/"):
 ## `app/orchestration.py` (new)
 
 ```python
-def run_linked_query(geojson, trait_filters, granule_filters, limit=100, debug=False):
+def run_linked_query(campaign_name, geojson, trait_filters, granule_filters, limit=100, debug=False):
 
     # Stage 1 — spatial filter → plot_ids
+    # campaign_name applied here to narrow plots before spatial filter
     stage1_filters = {}
     if geojson:
         stage1_filters["geom"] = geojson
-    if trait_filters.get("campaign_name"):
-        stage1_filters["campaign_name"] = trait_filters["campaign_name"]
+    if campaign_name:
+        stage1_filters["campaign_name"] = campaign_name
     plots_df = _execute("plot_shape_view", stage1_filters)
     stage1_plot_ids = plots_df["plot_id"].tolist()
 
@@ -69,11 +70,13 @@ def run_linked_query(geojson, trait_filters, granule_filters, limit=100, debug=F
         return empty_response()
 
     # Stage 2a — trait query
+    # campaign_name applied automatically since plot_ids are already filtered
     tf = {**trait_filters, "plot_id": stage1_plot_ids}
     # map collection_date_start/end → start_date/end_date for filter.py
     traits_df = _execute("trait_view", _remap_dates(tf, "collection_date"))
 
     # Stage 2b — granule query (joins granule_view to plot_raster_intersect)
+    # campaign_name applied automatically since plot_ids are already filtered
     gf = {**granule_filters, "plot_id": stage1_plot_ids}
     granules_df = _execute_granule_query(_remap_dates(gf, "acquisition_date"))
 
