@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Paper, Typography, TextField, Button, Box, Stack, Chip,
   Autocomplete, ToggleButton, ToggleButtonGroup, IconButton, Tooltip,
@@ -8,8 +8,107 @@ import {
   NavigateNext as NextIcon,
   Download as DownloadIcon,
   RestartAlt as ResetIcon,
+  CalendarMonth as CalendarIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { parse, isValid } from 'date-fns';
+
+// Auto-formats a raw keystroke string into YYYY-MM-DD as the user types.
+// Normalizes / to -, strips invalid chars, auto-inserts - after year and month.
+function formatDateInput(raw) {
+  // normalize separators and strip anything that isn't a digit or -
+  let val = raw.replace(/\//g, '-').replace(/[^\d-]/g, '');
+
+  // auto-insert - after year (position 4) if user just typed the 5th digit
+  if (val.length === 5 && !val.includes('-')) {
+    val = val.slice(0, 4) + '-' + val.slice(4);
+  }
+  // auto-insert - after month (position 7) if user just typed the 8th digit
+  if (val.length === 8 && val.indexOf('-', 5) === -1) {
+    val = val.slice(0, 7) + '-' + val.slice(7);
+  }
+
+  return val.slice(0, 10);
+}
+
+function DateFilterInput({ filter, value, onFilterChange }) {
+  const [inputText, setInputText] = useState(
+    value ? value.toISOString().slice(0, 10) : ''
+  );
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState(false);
+  const anchorRef = React.useRef(null);
+
+  const tryParse = (text) => {
+    if (!text) {
+      onFilterChange(filter.id, null);
+      setError(false);
+      return;
+    }
+    const parsed = parse(text, 'yyyy-MM-dd', new Date());
+    if (isValid(parsed) && text.length === 10) {
+      onFilterChange(filter.id, parsed);
+      setError(false);
+    } else if (text.length === 10) {
+      setError(true);
+    } else {
+      setError(false);
+    }
+  };
+
+  const handleTextChange = (e) => {
+    const formatted = formatDateInput(e.target.value);
+    setInputText(formatted);
+    tryParse(formatted);
+  };
+
+  const handleBlur = () => {
+    tryParse(inputText);
+  };
+
+  const handleCalendarChange = (newValue) => {
+    if (newValue && isValid(newValue)) {
+      const iso = newValue.toISOString().slice(0, 10);
+      setInputText(iso);
+      onFilterChange(filter.id, newValue);
+      setError(false);
+    }
+    setOpen(false);
+  };
+
+  return (
+    <Box sx={{ position: 'relative' }} ref={anchorRef}>
+      <TextField
+        label={filter.label}
+        value={inputText}
+        onChange={handleTextChange}
+        onBlur={handleBlur}
+        placeholder="YYYY-MM-DD"
+        size="small"
+        fullWidth
+        error={error}
+        helperText={error ? 'Use YYYY-MM-DD' : ''}
+        InputProps={{
+          endAdornment: (
+            <IconButton size="small" onClick={() => setOpen(true)} tabIndex={-1}>
+              <CalendarIcon fontSize="small" />
+            </IconButton>
+          ),
+        }}
+      />
+      <DatePicker
+        open={open}
+        onClose={() => setOpen(false)}
+        value={value || null}
+        onChange={handleCalendarChange}
+        slotProps={{
+          textField: { sx: { display: 'none' } },
+          popper: { anchorEl: anchorRef.current },
+        }}
+      />
+    </Box>
+  );
+}
 
 function FilterSection({
   filters,
@@ -75,13 +174,12 @@ function FilterSection({
         {filters.map(filter => {
           if (filter.type === 'date') {
             return (
-                <DatePicker
-                  key={filter.id}
-                  label={filter.label}
-                  value={filterValues[filter.id] || null}
-                  onChange={(newValue) => onFilterChange(filter.id, newValue)}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
+              <DateFilterInput
+                key={filter.id}
+                filter={filter}
+                value={filterValues[filter.id] || null}
+                onFilterChange={onFilterChange}
+              />
             );
           }
           else if (filter.type === 'enum' && filter.options) {

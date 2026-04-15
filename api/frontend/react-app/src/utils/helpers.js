@@ -76,14 +76,18 @@ export function parseFilters(filterValues, geojsonContent) {
     const value = filterValues[key];
     // Skip empty values: null, undefined, empty string, or empty array
     if (!value || (Array.isArray(value) && value.length === 0)) return;
-    if (key === 'plot_name') {
-      // plot_name may still arrive as a comma-separated string (text field)
+    if (key === 'plot_name' || key === 'granule_id') {
+      // Support comma-separated values for multi-value IN queries
       filters[key] = Array.isArray(value)
         ? value
-        : value.split(',').map(p => p.trim());
+        : value.split(',').map(p => p.trim()).filter(Boolean);
     } else if (Array.isArray(value)) {
       // Multi-select enum: pass the array directly
       filters[key] = value;
+    } else if (value instanceof Date && !isNaN(value)) {
+      // Format Date objects as YYYY-MM-DD — prevents JSON.stringify from
+      // serializing them as full ISO timestamps (e.g. 2023-08-01T00:00:00.000Z)
+      filters[key] = value.toISOString().slice(0, 10);
     } else {
       filters[key] = value;
     }
