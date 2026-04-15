@@ -82,6 +82,8 @@ CREATE TABLE vswir_plants.plot_shape (
     
 CREATE INDEX plot_shape_idx ON vswir_plants.plot_shape USING GIST (geom);
 
+-- A plot granule combo can have only 1 shape?, we would maybe need to add
+-- plot_shape_id to pk if a plot granule can have more than 1 shape
 CREATE TABLE vswir_plants.plot_raster_intersect ( 
     plot_id INTEGER NOT NULL,
     granule_id VARCHAR NOT NULL,
