@@ -3,7 +3,7 @@ CREATE TABLE vswir_plants.campaign (
     campaign_name VARCHAR PRIMARY KEY,
     primary_funding_source VARCHAR NOT NULL,
     data_repository vswir_plants."Repository",
-    doi VARCHAR,
+    -- doi VARCHAR,
     taxa_system VARCHAR
 );
 
@@ -11,8 +11,8 @@ CREATE TABLE vswir_plants.campaign (
 -- one campaign many dois
 -- what level do we integrate dois, campaign, trait etc
 CREATE TABLE vswir_plants.doi (
-    campaign_name VARCHAR PRIMARY KEY,
-    doi VARCHAR,
+    doi VARCHAR PRIMARY KEY,
+    campaign_name VARCHAR NOT NULL,
     CONSTRAINT doi_campaign_key FOREIGN KEY (campaign_name)
         REFERENCES vswir_plants.campaign(campaign_name)
         ON DELETE CASCADE,
@@ -20,7 +20,6 @@ CREATE TABLE vswir_plants.doi (
 );
 
 -- elevation source does it need a version?
--- add a column(s) for isofit configs either the file name or the s3 path
 CREATE TABLE vswir_plants.sensor_campaign (
     campaign_name VARCHAR NOT NULL,
     sensor_name vswir_plants."Sensor_name" NOT NULL,
@@ -47,7 +46,7 @@ CREATE TABLE vswir_plants.plot (
 -- a column to specify map space and raw space
 -- switch cloud condtion columns to use percentage and translate neon data to use that
 -- confidence on alignment column, categorical so this would require an enum
--- remove raster_epsg everything has to be wgs 84/ epsg 4326
+-- remove raster_epsg everything has to be wgs 84/ epsg 4326?
 CREATE TABLE vswir_plants.granule (
     granule_id VARCHAR PRIMARY KEY,
     campaign_name VARCHAR NOT NULL,
@@ -66,14 +65,8 @@ CREATE TABLE vswir_plants.granule (
         ON DELETE CASCADE
 );
 
--- Switch plot shape geom to be Geometry 4326
-
--- look into performance considerations how would this work with the index
--- I did not see any reason this would impact performance
-
--- look at the database_api backend to see how the queries are done and if there is performance considerations
--- I believe this would work with the current database_api
--- 1 plot can have many shapes?  1 plot event can have 1 shape? should we try to bring a key here to force a stronger uniquess constraint
+-- Switch plot shape geom to be Geometry 4326, no performance impact, and works with current api. Supports only points and polygons
+-- 1 plot can have many shapes?
 CREATE TABLE vswir_plants.plot_shape ( 
     plot_shape_id SERIAL PRIMARY KEY,
     geom geometry(GEOMETRY, 4326) NOT NULL 
@@ -82,8 +75,7 @@ CREATE TABLE vswir_plants.plot_shape (
     
 CREATE INDEX plot_shape_idx ON vswir_plants.plot_shape USING GIST (geom);
 
--- A plot granule combo can have only 1 shape?, we would maybe need to add
--- plot_shape_id to pk if a plot granule can have more than 1 shape
+-- A plot granule combo can have only 1 shape?, we would maybe need to add plot_shape_id to pk if a plot granule can have more than 1 shape
 CREATE TABLE vswir_plants.plot_raster_intersect ( 
     plot_id INTEGER NOT NULL,
     granule_id VARCHAR NOT NULL,
@@ -145,7 +137,7 @@ CREATE TABLE vswir_plants.extracted_spectra (
 
 -- support other types of outputs, cwc 
 -- change name to output_pixel_data_products?
--- include reflectance
+-- include reflectance?
 CREATE TABLE vswir_plants.output_pixel_data_products (
     pixel_id INTEGER PRIMARY KEY, 
     fc_class vswir_plants."FRACTIONAL_class",
@@ -160,7 +152,7 @@ CREATE TABLE vswir_plants.output_pixel_data_products (
 CREATE TABLE vswir_plants.output_pixel_rfl (
     pixel_id INTEGER PRIMARY KEY,
     reflectance FLOAT4[] NOT NULL,
-    -- uncertainty_ref FLOAT4[] NOT NULL, dropped for now
+    -- uncertainty_ref FLOAT4[] NOT NULL, dropped for now until included with isofit per pixel
     CONSTRAINT output_pixel_rfl_pixel_fkey FOREIGN KEY (pixel_id)
         REFERENCES vswir_plants.pixel(pixel_id) 
         ON DELETE CASCADE

@@ -1,4 +1,3 @@
-
 ## Python Client Example
 
 ```python
@@ -29,6 +28,7 @@ response = requests.post(
         },
         "format": "geoparquet",
         "limit":  100,
+        "offset": 0,      # increment by 100 to page through results
     }
 )
 data = response.json()
@@ -36,39 +36,57 @@ data = response.json()
 print(f"Showing {data['plot_count']} of {data['total_plot_count']} plots")
 
 # API Gateway returns base64-encoded binary — decode before reading
-plots    = gpd.read_parquet(io.BytesIO(base64.b64decode(data["plots_parquet"])))
+plots    = gpd.read_parquet(io.BytesIO(base64.b64decode(data["plots_geoparquet"])))
 traits   = pd.read_parquet(io.BytesIO(base64.b64decode(data["traits_parquet"])))
 granules = pd.read_parquet(io.BytesIO(base64.b64decode(data["granules_parquet"])))
 
-# Explode pixel_ids — one row per pixel
-pixels = granules.explode("pixel_ids").rename(columns={"pixel_ids": "pixel_id"})
-
-# Download spectra via extract spectra (existing flow)
-spectra = pd.read_parquet("spectra.parquet")  # pixel_id + band_1 ... band_N
-
-# Join spectra to pixels
-spectra_pixels = pixels[["granule_id", "sensor_name", "pixel_id"]].merge(
-    spectra, on="pixel_id"
-)
-
-# Link traits via plot_id
+# ── Step 1 — Merge plots, traits, and granules ────────────────────────────────
+# Explode granule plot_ids — one row per (granule, plot)
+# pixel_ids remains as a list column for use in Step 2
 granule_plots = granules.explode("plot_ids").rename(columns={"plot_ids": "plot_id"})
-result = spectra_pixels.merge(
-    granule_plots[["granule_id", "plot_id"]], on="granule_id"
-).merge(
-    traits[["plot_id", "sample_name", "trait", "value", "units", "taxa"]],
+
+# Join plots + traits + granules — one row per (plot, trait measurement, granule)
+result = plots.merge(traits, on="plot_id").merge(
+    granule_plots[["granule_id", "sensor_name", "acquisition_date",
+                   "cloudy_conditions", "plot_id", "pixel_ids"]],
     on="plot_id"
 )
 ```
 
-**Result shape:** One row per `(pixel, trait measurement)`. Spectra columns repeat for every trait of the same pixel's plot. If a plot has 5 traits and 20 pixels → 100 rows. Each row is one `(spectrum, trait)` observation — ready for trait prediction models.
+**Result after Step 1:** One row per `(plot, trait measurement, granule)`. If a plot
+has 3 traits and overlaps 2 granules → 6 rows for that plot. `geom` and `pixel_ids`
+are included as columns.
 
-| `pixel_id` | `granule_id` | `sensor_name` | `band_1` | `...` | `band_N` | `plot_id` | `sample_name` | `trait` | `value` | `units` | `taxa` |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 3817 | NIS01_20180621 | NEON AIS 1 | 0.023 | ... | 0.018 | 21 | 020-ER18_Picea | LMA | 412.9 | g/m2 | Picea engelmannii |
-| 3817 | NIS01_20180621 | NEON AIS 1 | 0.023 | ... | 0.018 | 21 | 020-ER18_Picea | Chl | 23.1 | µg/cm² | Picea engelmannii |
-| 3818 | NIS01_20180621 | NEON AIS 1 | 0.019 | ... | 0.015 | 21 | 020-ER18_Picea | LMA | 412.9 | g/m2 | Picea engelmannii |
-| 3818 | NIS01_20180621 | NEON AIS 1 | 0.019 | ... | 0.015 | 21 | 020-ER18_Picea | Chl | 23.1 | µg/cm² | Picea engelmannii |
+| `plot_id` | `plot_name` | `geom` | `trait` | `value` | `units` | `taxa` | `granule_id` | `sensor_name` | `acquisition_date` | `pixel_ids` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 21 | 020-ER18 | POLYGON(...) | LMA | 412.9 | g/m2 | Picea engelmannii | NIS01_20180621 | NEON AIS 1 | 2018-06-21 | [3817, 3818, ...] |
+| 21 | 020-ER18 | POLYGON(...) | Chl | 23.1 | µg/cm² | Picea engelmannii | NIS01_20180621 | NEON AIS 1 | 2018-06-21 | [3817, 3818, ...] |
+| 21 | 020-ER18 | POLYGON(...) | LMA | 412.9 | g/m2 | Picea engelmannii | NIS01_20180714 | NEON AIS 1 | 2018-07-14 | [4100, 4101, ...] |
+
+```python
+# ── Step 2 — Incorporate spectral data (optional) ─────────────────────────────
+# Download spectra via the Extract Spectra flow — see POST /query/spectra.
+# Produces a parquet file with one row per pixel: pixel_id + band_1 ... band_N
+spectra = pd.read_parquet("spectra.parquet")
+
+# Explode pixel_ids from the Step 1 result — one row per (plot, trait, pixel)
+result_pixels = result.explode("pixel_ids").rename(columns={"pixel_ids": "pixel_id"})
+
+# Join spectra onto the exploded result
+result = result_pixels.merge(spectra, on="pixel_id")
+```
+
+**Result after Step 2:** One row per `(pixel, trait measurement)`. Spectra columns
+repeat for every trait of the same pixel's plot. If a plot has 5 traits and 20 pixels
+→ 100 rows. Each row is one `(spectrum, trait)` observation — ready for trait
+prediction models.
+
+| `pixel_id` | `granule_id` | `sensor_name` | `band_1` | `...` | `band_N` | `plot_id` | `trait` | `value` | `units` | `taxa` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 3817 | NIS01_20180621 | NEON AIS 1 | 0.023 | ... | 0.018 | 21 | LMA | 412.9 | g/m2 | Picea engelmannii |
+| 3817 | NIS01_20180621 | NEON AIS 1 | 0.023 | ... | 0.018 | 21 | Chl | 23.1 | µg/cm² | Picea engelmannii |
+| 3818 | NIS01_20180621 | NEON AIS 1 | 0.019 | ... | 0.015 | 21 | LMA | 412.9 | g/m2 | Picea engelmannii |
+| 3818 | NIS01_20180621 | NEON AIS 1 | 0.019 | ... | 0.015 | 21 | Chl | 23.1 | µg/cm² | Picea engelmannii |
 
 ---
 
@@ -93,12 +111,13 @@ resp <- request("https://your-api-gateway-url/query") |>
       collection_date_end   = "2018-08-31"
     ),
     granule_filters = list(
-      sensor_name           = list("NEON AIS 1"),
+      sensor_name            = list("NEON AIS 1"),
       acquisition_date_start = "2018-06-01",
       acquisition_date_end   = "2018-08-31"
     ),
     format = "geoparquet",
-    limit  = 100
+    limit  = 100,
+    offset = 0       # increment by 100 to page through results
   )) |>
   req_perform() |>
   resp_body_json()
@@ -106,17 +125,53 @@ resp <- request("https://your-api-gateway-url/query") |>
 cat(sprintf("Showing %d of %d plots\n", resp$plot_count, resp$total_plot_count))
 
 # API Gateway returns base64-encoded binary — decode before reading
-plots    <- read_sf(rawConnection(base64decode(resp$plots_parquet)))
+plots    <- read_sf(rawConnection(base64decode(resp$plots_geoparquet)))
 traits   <- read_parquet(rawConnection(base64decode(resp$traits_parquet)))
 granules <- read_parquet(rawConnection(base64decode(resp$granules_parquet)))
-spectra  <- read_parquet("spectra.parquet")
 
-result <- granules |>
-  unnest(pixel_ids) |>
-  rename(pixel_id = pixel_ids) |>
-  inner_join(spectra, by = "pixel_id") |>
+# ── Step 1 — Merge plots, traits, and granules ────────────────────────────────
+# Explode granule plot_ids — one row per (granule, plot)
+# pixel_ids remains as a list column for use in Step 2
+granule_plots <- granules |>
   unnest(plot_ids) |>
-  rename(plot_id = plot_ids) |>
-  inner_join(traits, by = "plot_id")
+  rename(plot_id = plot_ids)
+
+# Join plots + traits + granules — one row per (plot, trait measurement, granule)
+result <- plots |>
+  inner_join(traits, by = "plot_id") |>
+  inner_join(
+    granule_plots |> select(granule_id, sensor_name, acquisition_date,
+                             cloudy_conditions, plot_id, pixel_ids),
+    by = "plot_id"
+  )
 ```
 
+**Result after Step 1:** Same structure as the Python Step 1 output.
+
+| `plot_id` | `plot_name` | `geom` | `trait` | `value` | `units` | `taxa` | `granule_id` | `sensor_name` | `acquisition_date` | `pixel_ids` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 21 | 020-ER18 | POLYGON(...) | LMA | 412.9 | g/m2 | Picea engelmannii | NIS01_20180621 | NEON AIS 1 | 2018-06-21 | [3817, 3818, ...] |
+| 21 | 020-ER18 | POLYGON(...) | Chl | 23.1 | µg/cm² | Picea engelmannii | NIS01_20180621 | NEON AIS 1 | 2018-06-21 | [3817, 3818, ...] |
+| 21 | 020-ER18 | POLYGON(...) | LMA | 412.9 | g/m2 | Picea engelmannii | NIS01_20180714 | NEON AIS 1 | 2018-07-14 | [4100, 4101, ...] |
+
+```r
+# ── Step 2 — Incorporate spectral data (optional) ─────────────────────────────
+# Download spectra via the Extract Spectra flow — see POST /query/spectra.
+spectra <- read_parquet("spectra.parquet")
+
+# Explode pixel_ids from the Step 1 result — one row per (plot, trait, pixel)
+result <- result |>
+  unnest(pixel_ids) |>
+  rename(pixel_id = pixel_ids) |>
+  inner_join(spectra, by = "pixel_id")
+```
+
+**Result after Step 2:** Same structure as the Python Step 2 output. One row per
+`(pixel, trait measurement)` — ready for trait prediction models.
+
+| `pixel_id` | `granule_id` | `sensor_name` | `band_1` | `...` | `band_N` | `plot_id` | `trait` | `value` | `units` | `taxa` |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 3817 | NIS01_20180621 | NEON AIS 1 | 0.023 | ... | 0.018 | 21 | LMA | 412.9 | g/m2 | Picea engelmannii |
+| 3817 | NIS01_20180621 | NEON AIS 1 | 0.023 | ... | 0.018 | 21 | Chl | 23.1 | µg/cm² | Picea engelmannii |
+| 3818 | NIS01_20180621 | NEON AIS 1 | 0.019 | ... | 0.015 | 21 | LMA | 412.9 | g/m2 | Picea engelmannii |
+| 3818 | NIS01_20180621 | NEON AIS 1 | 0.019 | ... | 0.015 | 21 | Chl | 23.1 | µg/cm² | Picea engelmannii |
