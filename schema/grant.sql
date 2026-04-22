@@ -4,11 +4,14 @@
 -- ---------------------------------------------------------------------------
 GRANT USAGE ON SCHEMA vswir_plants TO postgrest_user;
 
-GRANT SELECT ON vswir_plants.plot_pixels_mv          TO postgrest_user;
+-- v2 views (replaces plot_pixels_mv and leaf_traits_view)
+GRANT SELECT ON vswir_plants.plot_shape_view         TO postgrest_user;
+GRANT SELECT ON vswir_plants.trait_view              TO postgrest_user;
+GRANT SELECT ON vswir_plants.granule_view            TO postgrest_user;
+GRANT SELECT ON vswir_plants.pixel                   TO postgrest_user;
 GRANT SELECT ON vswir_plants.extracted_spectra_view  TO postgrest_user;
 GRANT SELECT ON vswir_plants.extracted_metadata_view TO postgrest_user;
-GRANT SELECT ON vswir_plants.reflectance_view         TO postgrest_user;
-GRANT SELECT ON vswir_plants.leaf_traits_view         TO postgrest_user;
+GRANT SELECT ON vswir_plants.reflectance_view        TO postgrest_user;
 
 -- ---------------------------------------------------------------------------
 -- isofit
@@ -96,7 +99,8 @@ GRANT SELECT, INSERT
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA vswir_plants TO ingestion_promotion;
 
 -- Production: refresh the materialized view after promotion
-GRANT SELECT ON vswir_plants.plot_pixels_mv TO ingestion_promotion;
+-- plot_pixels_mv has been retired; remove this grant when confirmed removed from DB.
+-- GRANT SELECT ON vswir_plants.plot_pixels_mv TO ingestion_promotion;
 -- REFRESH MATERIALIZED VIEW CONCURRENTLY requires the user to own the view,
 -- or be a superuser. In practice the promotion lambda runs as a superuser
 -- role or the view owner executes the refresh via a SECURITY DEFINER function.

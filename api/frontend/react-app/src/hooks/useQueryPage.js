@@ -8,7 +8,7 @@ import { VIEW_CONFIG, VIEW_CONFIGS } from '../viewConfig';
  * hook (useSpectraExtraction vs useIsoFitJob) and their layout.
  */
 export function useQueryPage() {
-  const [view, setView] = useState('plot_pixels_mv');
+  const [view, setView] = useState('plot_shape_view');
   const query = useDataQuery(view);
 
   const viewOptions = Object.entries(VIEW_CONFIG)
@@ -24,7 +24,7 @@ export function useQueryPage() {
 
   // onExtra is an optional callback for page-specific reset logic
   const handleReset = (onExtra) => {
-    setView('plot_pixels_mv');
+    setView('plot_shape_view');
     query.reset();
     onExtra?.();
   };

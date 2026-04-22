@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import QueryPage from './pages/QueryPage';
+import LinkedQueryPage from './pages/LinkedQueryPage';
 import IsoFitPage from './pages/IsoFitPage';
 import IngestPage from './pages/IngestPage';
 import AdminPage from './pages/AdminPage';
@@ -50,7 +51,8 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<QueryPage />} />
+      {/* <Route path="/old-query" element={<QueryPage />} /> */}
+      <Route path="/" element={<LinkedQueryPage />} />
 
       <Route
         path="/admin"

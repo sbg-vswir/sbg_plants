@@ -28,3 +28,4 @@ def get_connection():
     except Exception as e:
         print("Type:", type(e))
         print("Error:", repr(e))
+        raise

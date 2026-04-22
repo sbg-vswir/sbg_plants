@@ -13,7 +13,7 @@
 // Shared enum option lists
 // ---------------------------------------------------------------------------
 
-const ENUMS = {
+export const ENUMS = {
   sensor_name: [
     'NEON AIS 1',
     'NEON AIS 2',
@@ -142,31 +142,22 @@ const ENUMS = {
 // ---------------------------------------------------------------------------
 
 export const VIEW_CONFIG = {
-  plot_pixels_mv: {
+  plot_shape_view: {
     queryable: true,
-    displayName: 'Spectra',
+    displayName: 'Plots',
+    hideExtract: false,
     filters: [
-      { id: 'plot_name',                label: 'Plot Name:',              type: 'text', placeholder: 'e.g., 276-ER18,001-ER18' },
-      { id: 'campaign_name',            label: 'Campaign Name:',          type: 'text', placeholder: 'e.g., East River 2018' },
-      { id: 'sensor_name',              label: 'Sensor Name:',            type: 'enum', options: ENUMS.sensor_name },
-      { id: 'granule_id',               label: 'Granule ID:',             type: 'text', placeholder: 'e.g., NIS01_20180621_172130' },
-      { id: 'cloudy_conditions',        label: 'Cloud Conditions:',       type: 'enum', options: ENUMS.cloudy_conditions },
-      { id: 'cloud_type',               label: 'Cloud Type:',             type: 'enum', options: ENUMS.cloud_type },
-      { id: 'extraction_method',        label: 'Extraction Method:',      type: 'enum', options: ENUMS.extraction_method },
-      { id: 'delineation_method',       label: 'Delineation Method:',     type: 'enum', options: ENUMS.delineation_method },
-      { id: 'shape_aligned_to_granule', label: 'Shape Aligned to Granule:', type: 'text', placeholder: 'true or false' },
-      { id: 'start_date',               label: 'Start Date:',             type: 'date' },
-      { id: 'end_date',                 label: 'End Date:',               type: 'date' },
+      { id: 'plot_name',     label: 'Plot Name:',     type: 'text', placeholder: 'e.g., 276-ER18,001-ER18' },
+      { id: 'campaign_name', label: 'Campaign Name:', type: 'text', placeholder: 'e.g., East River 2018' },
+      { id: 'site_id',       label: 'Site ID:',       type: 'text', placeholder: 'e.g., CRBU' },
+      { id: 'plot_method',   label: 'Plot Method:',   type: 'enum', options: ENUMS.plot_method },
     ],
     select: [
-      'plot_name', 'campaign_name', 'sensor_name', 'granule_id',
-      'granule_date', 'acquisition_date', 'cloudy_conditions', 'cloud_type',
-      'gsd', 'extraction_method', 'delineation_method', 'shape_aligned_to_granule',
-      'pixel_ids', 'geom',
+      'plot_id', 'campaign_name', 'site_id', 'plot_name', 'plot_method', 'plot_shape_id', 'geom',
     ],
   },
 
-  leaf_traits_view: {
+  trait_view: {
     queryable: true,
     displayName: 'Traits',
     hideExtract: true,
@@ -194,8 +185,26 @@ export const VIEW_CONFIG = {
       'campaign_name', 'plot_id', 'site_id', 'plot_name', 'sample_name', 'collection_date',
       'trait', 'value', 'units', 'method', 'handling', 'error', 'error_type',
       'taxa', 'veg_or_cover_type', 'phenophase', 'sample_fc_class',
-      'sample_fc_percent', 'canopy_position', 'plant_status', 'plot_veg_type', 'subplot_cover_method',
-      'floristic_survey', 'plot_method', 'geom',
+      'canopy_position', 'plant_status', 'plot_veg_type', 'subplot_cover_method',
+      'floristic_survey', 'plot_method',
+    ],
+  },
+
+  granule_view: {
+    queryable: true,
+    displayName: 'Granules',
+    hideExtract: false,
+    filters: [
+      { id: 'campaign_name',    label: 'Campaign Name:',    type: 'text', placeholder: 'e.g., East River 2018' },
+      { id: 'sensor_name',      label: 'Sensor Name:',      type: 'enum', options: ENUMS.sensor_name },
+      { id: 'cloudy_conditions', label: 'Cloud Conditions:', type: 'enum', options: ENUMS.cloudy_conditions },
+      { id: 'cloud_type',       label: 'Cloud Type:',       type: 'enum', options: ENUMS.cloud_type },
+      { id: 'start_date',       label: 'Start Date:',       type: 'date' },
+      { id: 'end_date',         label: 'End Date:',         type: 'date' },
+    ],
+    select: [
+      'granule_id', 'campaign_name', 'sensor_name', 'acquisition_date',
+      'acquisition_start_time', 'cloudy_conditions', 'cloud_type', 'gsd',
     ],
   },
 

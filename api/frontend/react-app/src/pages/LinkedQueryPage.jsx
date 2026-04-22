@@ -7,7 +7,8 @@ import {
   Search as SearchIcon,
   NavigateBefore as PrevIcon,
   NavigateNext as NextIcon,
-  PlayArrow as RunIcon,
+  Download as DownloadIcon,
+  GraphicEq as SpectraIcon,
   RestartAlt as ResetIcon,
 } from '@mui/icons-material';
 
@@ -16,40 +17,73 @@ import MapView from '../components/MapView';
 import LinkedFilterPanel from '../components/LinkedFilterPanel';
 import PlotSidePanel from '../components/PlotSidePanel';
 import LinkedDataTable from '../components/LinkedDataTable';
-import IsoFitStatus from '../components/IsoFitStatus';
-import IsoFitHistory from '../components/IsoFitHistory';
+import JobStatus from '../components/JobStatus';
 
 import { useLinkedQuery } from '../hooks/useLinkedQuery';
-import { useIsoFitJob } from '../hooks/useIsoFitJob';
+import { useSpectraExtraction } from '../hooks/useSpectraExtraction';
 
-function IsoFitPage() {
+function LinkedQueryPage() {
   const q = useLinkedQuery();
   const clearDrawnRef = useRef(null);
 
-  const [isoFitDisabled, setIsoFitDisabled] = useState(false);
+  const [extractDisabled, setExtractDisabled] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
-  const isofit = useIsoFitJob(
+  const spectra = useSpectraExtraction(
     q.getPixelRanges,
     q.setError,
-    setIsoFitDisabled,
+    setExtractDisabled,
   );
+
+  const handleDownloadCSV = async () => {
+    setDownloadLoading(true);
+    try {
+      const rows = await q.getMergedDownloadData();
+      if (!rows.length) { q.setError('No data to download'); return; }
+      const cols = Object.keys(rows[0]);
+      const lines = [
+        cols.join(','),
+        ...rows.map(row =>
+          cols.map(c => {
+            const val = row[c];
+            if (val === null || val === undefined) return '';
+            const str = String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+              return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+          }).join(',')
+        ),
+      ].join('\n');
+      const blob = new Blob(['\uFEFF' + lines], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'linked_query.csv';
+      document.body.appendChild(link);
+      link.click();
+      URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch (err) {
+      q.setError(err.message ?? 'Download failed');
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
 
   const hasResults = q.totalPlots > 0 || q.traits.length > 0 || q.granules.length > 0;
   const hasPrev    = q.offset > 0;
   const hasNext    = q.totalPlots > q.offset + q.limit;
-
-  const pixelLabel = q.hasQueried
-    ? `${q.pagePixelCount.toLocaleString()} px (page) / ${q.pixelCountLoading ? '…' : (q.totalPixelCount ?? 0).toLocaleString()} px (total)`
-    : null;
+  const showPaging = q.totalPlots > 0 && (hasPrev || hasNext);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <Navbar />
 
-      {/* Two-column body */}
+      {/* Two-column body — fills remaining height, each column scrolls independently */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', mt: '56px' }}>
 
-        {/* Left — filter panel */}
+        {/* Left — filter panel, scrollable */}
         <Box
           sx={{
             width: 380,
@@ -91,7 +125,7 @@ function IsoFitPage() {
             variant="contained"
             color="secondary"
             startIcon={<ResetIcon />}
-            onClick={() => { q.handleReset(); isofit.reset(); setIsoFitDisabled(false); clearDrawnRef?.current?.(); }}
+            onClick={() => { q.handleReset(); spectra.reset(); setExtractDisabled(false); clearDrawnRef?.current?.(); }}
             disabled={q.loading}
             fullWidth
           >
@@ -99,33 +133,27 @@ function IsoFitPage() {
           </Button>
 
           {hasResults && (
-            <Typography variant="body2" color="text.secondary">
-              {q.totalPlots} plots matched
-            </Typography>
+            <Box>
+              <Typography variant="body2" color="text.secondary">
+                {q.totalPlots} plots matched
+              </Typography>
+            </Box>
           )}
         </Box>
 
-        {/* Right — IsoFit panels + map + table */}
+        {/* Right — map + side panel + table, scrollable */}
         <Box sx={{ flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-
-          {/* IsoFit job monitoring + history — always at top */}
-          <IsoFitStatus
-            parentJobId={isofit.isoFitJobId}
-            isPolling={isofit.isIsoFitPolling}
-            onStopPolling={() => isofit.setIsIsoFitPolling(false)}
-            onStartPolling={() => isofit.setIsIsoFitPolling(true)}
-            onClose={() => { isofit.setIsIsoFitPolling(false); isofit.setActiveJobId(null); }}
-          />
-          <IsoFitHistory
-            activeJobId={isofit.isoFitJobId}
-            onMonitor={(jobId) => {
-              isofit.setActiveJobId(jobId);
-              isofit.setIsIsoFitPolling(false);
-            }}
-          />
 
           {q.error && (
             <Alert severity="error" onClose={() => q.setError(null)}>{q.error}</Alert>
+          )}
+          {Object.entries(spectra.sensorStatuses ?? {}).some(([, s]) => s.error) && (
+            <Alert severity="error">
+              {Object.entries(spectra.sensorStatuses)
+                .filter(([, s]) => s.error)
+                .map(([key, s]) => `${key}: ${s.error}`)
+                .join(' | ')}
+            </Alert>
           )}
 
           {q.loading && (
@@ -138,9 +166,10 @@ function IsoFitPage() {
             <Alert severity="info">No plots matched your filters.</Alert>
           )}
 
-          {/* Main area: map + action bar + table beside side panel */}
+          {/* Main area: [map+table] beside [side panel] */}
           <Stack direction="row" spacing={2} alignItems="flex-start">
 
+            {/* Left: map then action bar then table stacked */}
             <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
               <MapView
                 mapData={q.mapData}
@@ -154,7 +183,7 @@ function IsoFitPage() {
                 drawnShape={q.geojsonContent && q.geojsonIsDrawn ? q.geojsonContent : null}
               />
 
-              {/* Action bar */}
+              {/* Action bar — between map and table */}
               {hasResults && (
                 <Paper elevation={1} sx={{ px: 2, py: 1.5 }}>
                   <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
@@ -175,32 +204,40 @@ function IsoFitPage() {
                     {/* Pixel count display */}
                     {q.hasQueried && (
                       <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                        {pixelLabel}
+                        {q.pagePixelCount.toLocaleString()} px (page) /{' '}
+                        {q.pixelCountLoading ? '…' : (q.totalPixelCount ?? 0).toLocaleString()} px (total)
                       </Typography>
                     )}
 
-                    {/* Radiance toggle — locked */}
-                    <ToggleButtonGroup value="radiance" exclusive size="small">
-                      <ToggleButton value="radiance" sx={{ textTransform: 'none', fontSize: 12 }}>Radiance</ToggleButton>
-                      <ToggleButton value="reflectance" disabled sx={{ textTransform: 'none', fontSize: 12 }}>Reflectance</ToggleButton>
+                    {/* Radiance / Reflectance toggle */}
+                    <ToggleButtonGroup
+                      value={spectra.spectraType}
+                      exclusive
+                      onChange={(_, v) => { if (v) spectra.setSpectraType(v); }}
+                      size="small"
+                    >
+                      <ToggleButton value="radiance"     sx={{ textTransform: 'none', fontSize: 12 }}>Radiance</ToggleButton>
+                      <ToggleButton value="reflectance"  sx={{ textTransform: 'none', fontSize: 12 }}>Reflectance</ToggleButton>
                     </ToggleButtonGroup>
 
-                    <Button
-                      variant="contained"
-                      size="small"
-                      color="error"
-                      startIcon={<RunIcon />}
-                      onClick={() => {
-                        if (!window.confirm('Are you sure you want to run ISOFIT?')) return;
-                        isofit.handleRunIsoFit();
-                      }}
-                      disabled={isoFitDisabled || isofit.isIsoFitPolling || !q.hasQueried}
-                    >
-                      Run ISOFIT
+                     <Button variant="contained" size="small" color="secondary" startIcon={<SpectraIcon />}
+                       onClick={spectra.handleExtractSpectra}
+                       disabled={extractDisabled || spectra.isPolling || !q.hasQueried}>
+                      Extract Spectra
                     </Button>
+                     <Button variant="contained" size="small" startIcon={downloadLoading ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />}
+                       onClick={handleDownloadCSV} disabled={downloadLoading || !q.hasQueried}>
+                       Download CSV{q.totalCsvRows != null ? ` (${q.totalCsvRows.toLocaleString()} rows)` : q.hasQueried ? ' (…)' : ''}
+                     </Button>
                   </Stack>
                 </Paper>
               )}
+
+              {/* Job status — above table */}
+              <JobStatus
+                jobsBySensor={spectra.jobsBySensor ?? {}}
+                sensorStatuses={spectra.sensorStatuses ?? {}}
+              />
 
               {hasResults && (
                 <LinkedDataTable
@@ -212,7 +249,7 @@ function IsoFitPage() {
               )}
             </Box>
 
-            {/* Side panel */}
+            {/* Right: side panel — sticky so it stays in view while scrolling */}
             {q.selectedPlotId && (
               <Box sx={{ position: 'sticky', top: 0, alignSelf: 'flex-start', flexShrink: 0 }}>
                 <PlotSidePanel
@@ -230,4 +267,4 @@ function IsoFitPage() {
   );
 }
 
-export default IsoFitPage;
+export default LinkedQueryPage;

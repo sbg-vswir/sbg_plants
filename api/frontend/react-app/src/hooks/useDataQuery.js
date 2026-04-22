@@ -55,7 +55,7 @@ export function useDataQuery(view) {
 
     const hasRows = tableRows.length > 0;
     setNextDisabled(!hasRows);
-    setExtractDisabled(!hasRows || view === 'leaf_traits_view');
+    setExtractDisabled(!hasRows || view === 'trait_view');
     setDownloadTableDisabled(!hasRows);
 
     if (geojson) {

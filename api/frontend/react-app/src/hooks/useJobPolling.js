@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { pollJobStatus } from '../utils/api';
 
-export function useJobPolling(jobsBySensor, isPolling) {
+export function useJobPolling(jobsBySensor, isPolling, onAllComplete) {
   const [sensorStatuses, setSensorStatuses] = useState({});
   const intervalsRef = useRef({});
 
@@ -20,6 +20,9 @@ export function useJobPolling(jobsBySensor, isPolling) {
         Object.keys(jobsBySensor).map(key => [key, { status: 'queued', rowsProcessed: 0, downloadUrl: null, error: null }])
       )
     );
+
+    const totalJobs = Object.keys(jobsBySensor).length;
+    let completedJobs = 0;
 
     Object.entries(jobsBySensor).forEach(([sensorKey, jobId]) => {
       const poll = async () => {
@@ -40,6 +43,10 @@ export function useJobPolling(jobsBySensor, isPolling) {
           if (result.presigned_url) {
             clearInterval(intervalsRef.current[sensorKey]);
             delete intervalsRef.current[sensorKey];
+            completedJobs += 1;
+            if (completedJobs >= totalJobs && onAllComplete) {
+              onAllComplete();
+            }
           }
         } catch (err) {
           setSensorStatuses(prev => ({
@@ -48,6 +55,10 @@ export function useJobPolling(jobsBySensor, isPolling) {
           }));
           clearInterval(intervalsRef.current[sensorKey]);
           delete intervalsRef.current[sensorKey];
+          completedJobs += 1;
+          if (completedJobs >= totalJobs && onAllComplete) {
+            onAllComplete();
+          }
         }
       };
 

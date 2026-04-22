@@ -4,6 +4,32 @@ import { parseParquetData } from './parquetUtils';
 import { SELECT_CONFIGS } from '../viewConfig';
 
 /**
+ * POST /query — 3-stage linked plot/trait/granule query.
+ */
+export async function fetchLinkedQuery(payload) {
+  const response = await client.post('/query', payload);
+  const raw = typeof response.data === 'string'
+    ? response.data
+    : JSON.stringify(response.data);
+  const sanitized = raw.replace(/:\s*NaN\b/g, ': null');
+  return JSON.parse(sanitized);
+}
+
+/**
+ * Fetch ALL matching results for a linked query (no limit/offset — used for downloads).
+ * Strips limit/offset from the payload so the backend returns everything.
+ */
+export async function fetchLinkedQueryAll(payload) {
+  const { limit: _l, offset: _o, ...rest } = payload;
+  const response = await client.post('/query', { ...rest, limit: 100000, offset: 0 });
+  const raw = typeof response.data === 'string'
+    ? response.data
+    : JSON.stringify(response.data);
+  const sanitized = raw.replace(/:\s*NaN\b/g, ': null');
+  return JSON.parse(sanitized);
+}
+
+/**
  * Fetch Parquet data from API
  */
 export async function fetchParquet(view, filters, limit = null, offset = 0) {
@@ -29,7 +55,7 @@ export async function fetchParquet(view, filters, limit = null, offset = 0) {
 
   let response;
   try {
-    response = await client.post(`/views/${view}`, payload, {
+    response = await client.post(`/query/${view}`, payload, {
       responseType: 'arraybuffer'
     });
   } catch (err) {
@@ -56,6 +82,9 @@ export async function fetchParquet(view, filters, limit = null, offset = 0) {
 /**
  * Start spectra extraction job.
  * spectraType: 'radiance' | 'reflectance'
+ *
+ * pixelRangesBySensor: { "campaign|sensor": pixelRanges }
+ *   where pixelRanges is a list of [start, end] numeric ranges or a flat array of pixel_ids
  */
 export async function extractSpectra(pixelRangesBySensor, spectraType = 'radiance') {
   const view = spectraType === 'reflectance' ? 'reflectance_view' : 'extracted_spectra_view';
@@ -85,7 +114,7 @@ export async function extractSpectra(pixelRangesBySensor, spectraType = 'radianc
         },
       };
 
-      const response = await client.post(`/views/${view}`, payload);
+      const response = await client.post(`/query/${view}`, payload);
       return [sensorKey, response.data.job_id];
     })
   );

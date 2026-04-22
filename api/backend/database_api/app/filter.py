@@ -9,6 +9,7 @@ from app.filter_utils import (
     _build_date_clause,
     _build_date_range_clauses,
     _build_geom_clause,
+    _build_array_in_clause,
 )
 
 logger = logging.getLogger("lambda_handler")
@@ -59,6 +60,8 @@ def build_where_clause(view_name, filters):
             _build_boolean_clause(col, val, clauses, params)
         elif field_type == "date":
             _build_date_clause(col, val, clauses, params)
+        elif field_type == "array":
+            _build_array_in_clause(col, val, clauses, params)
         else:
             raise ValueError(f"Unknown field type '{field_type}' for column '{col}' in view '{view_name}'")
 

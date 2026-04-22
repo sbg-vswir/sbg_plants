@@ -386,7 +386,6 @@ resource "aws_batch_compute_environment" "worker" {
       "m5.2xlarge",
       "m4.xlarge",
       "m4.2xlarge",
-      "r5.large",
       "r5.xlarge",
     ]
 
@@ -448,15 +447,15 @@ resource "aws_batch_job_definition" "worker" {
     command = ["bash", "-c", "aws s3 sync s3://vswir-plants-config/isofit-app/ /root/app/ --region us-west-2 && python3 /root/app/entrypoint.py"]
 
     resourceRequirements = [
-      { type = "VCPU", value = "1" },
-      { type = "MEMORY", value = "8192" }
+      { type = "VCPU", value = "4" },
+      { type = "MEMORY", value = "14336" }
     ]
 
     executionRoleArn = aws_iam_role.batch_execution_role.arn
     jobRoleArn       = aws_iam_role.batch_job_role.arn
 
     linuxParameters = {
-      sharedMemorySize = 3072
+      sharedMemorySize = 5120
     }
 
     environment = [
@@ -465,6 +464,7 @@ resource "aws_batch_job_definition" "worker" {
       { name = "AWS_REGION", value = var.region },
       { name = "PYTHONPATH", value = "/root/app" },
       { name = "PYTHONUNBUFFERED", value = "1" },
+      { name = "NCPU", value = "4" },
     ]
 
     logConfiguration = {

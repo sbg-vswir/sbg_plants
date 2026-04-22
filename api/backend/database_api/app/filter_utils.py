@@ -115,6 +115,17 @@ def _build_date_range_clauses(filters, date_column, clauses, params):
         clauses.append(f'"{date_column}" <= %s')
         params.append(filters["end_date"])
 
+def _build_array_in_clause(col, ids, clauses, params):
+    """Build WHERE clause for array-membership filter: col = ANY(%s).
+
+    *ids* should be a Python list; psycopg2 will bind it as a Postgres array.
+    """
+    if not ids:
+        return
+    clauses.append(f'"{col}" = ANY(%s)')
+    params.append(list(ids))
+
+
 def _build_geom_clause(geom, clauses, params):
     """Build WHERE clause for geom intersection."""
     # optimally uses the spatial index by first doing geom && ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326) filtering via bounding boxes

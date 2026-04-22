@@ -195,8 +195,8 @@ resource "aws_lambda_function" "vswir-plants" {
     }
   }
 
-  timeout     = 60       # seconds 900 max
-  memory_size = 1024 * 2 # 1GB memory
+  timeout     = 120      # seconds — linked query opens up to 5 parallel DB connections
+  memory_size = 1024 * 2 # 2GB memory — sufficient for page-scoped result sets
 
   tags = var.tags
 }
@@ -253,17 +253,49 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
   }
 }
 
-resource "aws_apigatewayv2_route" "json_view" {
+resource "aws_apigatewayv2_route" "query_linked" {
   api_id             = aws_apigatewayv2_api.vswir_plants.id
-  route_key          = "GET /views/{view_name}"
+  route_key          = "POST /query"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
   authorization_type = "JWT"
 }
 
-resource "aws_apigatewayv2_route" "json_view_post" {
+resource "aws_apigatewayv2_route" "query_spectra" {
   api_id             = aws_apigatewayv2_api.vswir_plants.id
-  route_key          = "POST /views/{view_name}"
+  route_key          = "POST /query/spectra"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "query_reflectance" {
+  api_id             = aws_apigatewayv2_api.vswir_plants.id
+  route_key          = "POST /query/reflectance"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "query_metadata" {
+  api_id             = aws_apigatewayv2_api.vswir_plants.id
+  route_key          = "GET /query/metadata"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "query_view_get" {
+  api_id             = aws_apigatewayv2_api.vswir_plants.id
+  route_key          = "GET /query/{view_name}"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "query_view_post" {
+  api_id             = aws_apigatewayv2_api.vswir_plants.id
+  route_key          = "POST /query/{view_name}"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
   authorization_type = "JWT"
