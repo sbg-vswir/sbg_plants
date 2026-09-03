@@ -171,8 +171,8 @@ CREATE TYPE vswir_plants."VEGETATION_type" AS ENUM (
 
 CREATE TYPE vswir_plants."DELINEATION_method" AS ENUM (
     'posthoc',
-    'radius Buffer',
-    'in Field'
+    'radius buffer',
+    'in field'
 ); 
 
 CREATE TYPE vswir_plants."CLOUD_conditions" AS ENUM (
@@ -223,7 +223,7 @@ CREATE TYPE vswir_plants."FRACTIONAL_class" AS ENUM (
 CREATE TYPE vswir_plants."SUBPLOT_cover_method" AS ENUM (
     'point',
     'line-intercept-transect',
-    'auadrat',
+    'quadrat',
     'visual assessment',
     'N/A'
     -- 'not recorded'
