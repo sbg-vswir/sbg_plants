@@ -134,3 +134,8 @@ variable "pixel_output_promotion_ecr_image" {
   description = "ECR image URI for the pixel output promotion Lambda"
   type        = string
 }
+
+variable "enums_ecr_image" {
+  description = "ECR image URI for the enums Lambda"
+  type        = string
+}

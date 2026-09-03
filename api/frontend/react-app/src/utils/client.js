@@ -67,4 +67,63 @@ client.interceptors.response.use(
   }
 );
 
+// -----------------------------------------------------------------------
+// Cold-start retry — query-page traffic only.
+//
+// A Lambda cold start can occasionally surface to the client as a bare
+// HTTP 500 (the container fails/crashes during init, before our own
+// handler code ever runs to produce a proper error response). A couple of
+// bounded retries gives the next attempt a chance to land on an
+// already-warm container.
+//
+// Scoped deliberately to read-only "query page" traffic — GET requests,
+// plus POST /query* (which are semantically SELECT queries server-side,
+// see database_api/app/main.py — no writes happen on these routes even
+// though they use POST). This intentionally excludes mutation endpoints
+// (/admin/*, /ingest/*, /run_isofit, algorithm job submission, etc.) —
+// retrying those could duplicate a real side effect (e.g. submit a second
+// AWS Batch job, create a duplicate user) if the original request actually
+// completed server-side before the response failed to come back.
+// -----------------------------------------------------------------------
+const MAX_COLD_START_RETRIES = 2;
+const COLD_START_RETRY_DELAYS_MS = [300, 800];
+
+function isRetryableQueryRequest(config) {
+  const method = (config.method || 'get').toLowerCase();
+  if (method === 'get') return true;
+  if (method === 'post') {
+    const path = (config.url || '').split('?')[0];
+    return path === '/query' || path.startsWith('/query/');
+  }
+  return false;
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+client.interceptors.response.use(
+  response => response,
+  async error => {
+    const original = error.config;
+
+    if (
+      !original ||
+      error.response?.status !== 500 ||
+      !isRetryableQueryRequest(original)
+    ) {
+      return Promise.reject(error);
+    }
+
+    const attempt = original._coldStartRetryCount || 0;
+    if (attempt >= MAX_COLD_START_RETRIES) {
+      return Promise.reject(error);
+    }
+
+    original._coldStartRetryCount = attempt + 1;
+    await delay(COLD_START_RETRY_DELAYS_MS[attempt] ?? COLD_START_RETRY_DELAYS_MS.at(-1));
+    return client(original);
+  }
+);
+
 export default client;

@@ -30,10 +30,12 @@ One row per campaign + sensor combination. Campaign-level fields (`primary_fundi
 | `campaign_name` | `campaign` | No | |
 | `primary_funding_source` | `campaign` | No | |
 | `data_repository` | `campaign` | Yes | `Repository` |
-| `doi` | `campaign` | Yes | |
 | `taxa_system` | `campaign` | Yes | |
 | `sensor_name` | `sensor_campaign` | No | `Sensor_name` |
 | `elevation_source` | `sensor_campaign` | No | `ELEVATION_source` |
+| `doi` | `campaign` | Yes | |
+| `doi_type` | `campaign` | Yes | |
+| `doi_subtype` | `campaign` | Yes | |
 
 **Primary key:** `(campaign_name, sensor_name)`
 
@@ -136,20 +138,27 @@ intersection. Accepted geometry types are **Point** and **Polygon**.
 
 ### `traits.csv`
 
-One row per trait measurement. Plot event and sample fields repeat across rows for the same
-sample. `(plot_name, campaign_name)` resolves `plot_id` — the plot must exist in
+Each row represents a sample and, optionally, a trait measurement. Multiple rows
+may represent the same sample when the sample has multiple trait measurements.
+
+A sample may also be included without any trait measurements. In this case,
+`trait`, `value`, `method`, `handling`, and `units` must all be blank.
+
+`(plot_name, campaign_name)` resolves `plot_id` — the plot must exist in
 `plots.geojson` in this bundle or in `plot` in the database.
 
 **Processing steps:**
+
 1. Resolve `plot_id` from `(plot_name, campaign_name)`
 2. `(plot_id, collection_date, plot event fields)` → `insitu_plot_event`
 3. `(plot_id, collection_date, sample fields)` → `sample`
 4. `(plot_id, collection_date, sample_name, trait fields)` → `leaf_traits`
+   when trait fields are provided
 
 | Column | Table | Nullable | Enum |
-|--------|-------|----------|------|
-| `plot_name` | *(resolve plot_id)* | No | |
-| `campaign_name` | *(resolve plot_id)* | No | |
+|---|---|---|---|
+| `plot_name` | *(resolve `plot_id`)* | No | |
+| `campaign_name` | *(resolve `plot_id`)* | No | |
 | `collection_date` | `insitu_plot_event`, `sample`, `leaf_traits` | No | |
 | `plot_veg_type` | `insitu_plot_event` | No | `VEGETATION_type` |
 | `subplot_cover_method` | `insitu_plot_event` | No | `SUBPLOT_cover_method` |
@@ -162,15 +171,37 @@ sample. `(plot_name, campaign_name)` resolves `plot_id` — the plot must exist 
 | `sample_fc_percent` | `sample` | No | |
 | `plant_status` | `sample` | No | `PLANT_status` |
 | `canopy_position` | `sample` | No | `CANOPY_position` |
-| `trait` | `leaf_traits` | No | `Trait` |
-| `value` | `leaf_traits` | No | |
-| `method` | `leaf_traits` | No | `Trait_method` |
-| `handling` | `leaf_traits` | No | `Sample_handling` |
-| `units` | `leaf_traits` | No | `Trait_units` |
+| `trait` | `leaf_traits` | Yes* | `Trait` |
+| `value` | `leaf_traits` | Yes* | |
+| `method` | `leaf_traits` | Yes* | `Trait_method` |
+| `handling` | `leaf_traits` | Yes* | `Sample_handling` |
+| `units` | `leaf_traits` | Yes* | `Trait_units` |
 | `error` | `leaf_traits` | Yes | |
 | `error_type` | `leaf_traits` | Yes | `Error_type` |
 
-**Primary key:** `(plot_name, campaign_name, collection_date, sample_name, trait)`
+\* `trait`, `value`, `method`, `handling`, and `units` must either **all be
+populated or all be blank**. This allows a sample to be included without any
+trait measurements, but does not allow partially populated trait records.
+
+**Uniqueness:**
+
+The logical uniqueness of a trait record is:
+
+`(sample_name, plot_name, collection_date, trait, method, handling, units)`
+
+`value` is not part of the uniqueness check. The same trait may occur more than
+once for a sample when `method`, `handling`, or `units` differ.
+
+**Database primary key:**
+
+`trait_id` is the database primary key and is auto-generated during ingestion.
+It must **not** be included in `traits.csv`.
+
+**Validation requirements:**
+
+- `error_type` is required whenever `error` is provided.
+- `plot_name` and `campaign_name` are used to resolve the database `plot_id`;
+  `plot_id` does not need to be included in the CSV.
 
 ---
 
@@ -309,12 +340,13 @@ single report — the pipeline does not stop at the first failing file.
 ### `traits.csv`
 
 | Check | Detail |
-|-------|--------|
+|---|---|
 | `(campaign_name, plot_name)` resolves | Must exist in this bundle or in production `plot` |
 | `error_type` required when `error` is set | If `error` has a value, `error_type` must also be present |
-| `(campaign_name, plot_name, collection_date)` not in database | Must not already exist in production `insitu_plot_event` |
-| `(campaign_name, plot_name, collection_date, sample_name)` not in database | Must not already exist in production `sample` |
-| `(campaign_name, plot_name, collection_date, sample_name, trait)` not in database | Must not already exist in production `leaf_traits` |
+| Trait fields are all populated or all blank | `trait`, `value`, `method`, `handling`, and `units` must either all be populated or all be blank. This allows samples with no trait measurements. |
+| Plot event does not already exist | `(campaign_name, plot_name, collection_date)` must not already exist in production `insitu_plot_event` |
+| Sample does not already exist | `(campaign_name, plot_name, collection_date, sample_name)` must not already exist in production `sample` |
+| Trait record is not duplicated | `(campaign_name, plot_name, collection_date, sample_name, trait, method, handling, units)` must be unique within `traits.csv` and must not already exist in production `leaf_traits`. `value` is not part of the uniqueness check. |
 
 ### `spectra.csv`
 

@@ -6,6 +6,7 @@ import {
 import {
   CheckCircle as ApproveIcon,
   Cancel as RejectIcon,
+  DeleteForever as DeleteIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
@@ -22,7 +23,12 @@ export const STATUS_CHIP = {
   REJECTED:     { color: 'default',  label: 'Rejected' },
 };
 
-export default function BatchRow({ batch, fileSlots, onApprove, onReject, onBatchUpdate }) {
+// Mirrors NON_DELETABLE_STATUSES in ingest_trigger/app/main.py — PENDING/
+// QAQC_RUNNING (avoids a race with the fire-and-forget QAQC lambda) and
+// PROMOTED (keep the audit trail of what made it to production).
+const DELETABLE_STATUSES = new Set(['QAQC_PASS', 'QAQC_FAIL', 'REJECTED']);
+
+export default function BatchRow({ batch, fileSlots, onApprove, onReject, onDelete, onBatchUpdate }) {
   const [expanded, setExpanded]           = useState(false);
   const [replacedSlots, setReplacedSlots] = useState(new Set());
   const [fullReport, setFullReport]       = useState(null);
@@ -90,8 +96,11 @@ export default function BatchRow({ batch, fileSlots, onApprove, onReject, onBatc
   return (
     <>
       <TableRow hover>
-        <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
-          {batch.batch_id.slice(0, 8)}…
+        <TableCell>
+          <Typography variant="body2">{batch.name || 'Unnamed batch'}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+            {batch.batch_id.slice(0, 8)}…
+          </Typography>
         </TableCell>
         <TableCell>
           <Stack direction="row" spacing={0.5}>
@@ -138,6 +147,17 @@ export default function BatchRow({ batch, fileSlots, onApprove, onReject, onBatc
               <IconButton size="small" onClick={() => setExpanded(e => !e)}>
                 {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
               </IconButton>
+            )}
+            {DELETABLE_STATUSES.has(batch.status) && (
+              <Tooltip title="Delete — permanently removes files and this record">
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => onDelete(batch.batch_id, batch.name)}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             )}
           </Stack>
         </TableCell>

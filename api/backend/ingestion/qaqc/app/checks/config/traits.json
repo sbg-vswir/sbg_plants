@@ -13,16 +13,17 @@
     "sample_fc_class",
     "sample_fc_percent",
     "plant_status",
-    "canopy_position",
+    "canopy_position"
+  ],
+  "nullable_cols": [
+    "error",
+    "error_type",
     "trait",
     "value",
     "method",
     "handling",
-    "units"
-  ],
-  "nullable_cols": [
-    "error",
-    "error_type"
+    "units",
+    "doi"
   ],
   "enum_cols": {
     "campaign_name":        "CAMPAIGN_name",
@@ -46,5 +47,6 @@
     "sample_fc_percent": "int",
     "floristic_survey":  "bool"
   },
-  "pk_cols": ["plot_name", "campaign_name", "collection_date", "sample_name", "trait"]
+
+  "pk_cols": []
 }

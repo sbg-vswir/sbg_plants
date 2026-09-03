@@ -28,7 +28,7 @@ resource "aws_db_instance" "default" {
   identifier             = "${var.name}-instance"
   db_name                = var.db_name
   engine                 = "postgres"
-  engine_version         = "18.1"
+  engine_version         = "18.3"
   instance_class         = "db.t3.small"
   username               = "dbadmin"
   password               = var.db_password

@@ -26,6 +26,7 @@ def load_all(conn) -> dict:
         # campaign
         "campaign_names":             fetch_campaign_names(conn),
         "campaign_sensor_set":        fetch_campaign_sensor_set(conn),
+        "doi_set":                    fetch_doi_set(conn),
         # granule
         "granule_ids":                fetch_granule_ids(conn),
         "granule_gsd_map":            fetch_granule_gsd_map(conn),
@@ -59,6 +60,12 @@ def fetch_campaign_sensor_set(conn) -> set:
         conn,
     )
     return set(zip(df["campaign_name"], df["sensor_name"]))
+
+
+def fetch_doi_set(conn) -> set:
+    """Set of doi values already in production vswir_plants.doi."""
+    df = pd.read_sql("SELECT doi FROM vswir_plants.doi", conn)
+    return set(df["doi"])
 
 
 # ── granule ────────────────────────────────────────────────────────────────────

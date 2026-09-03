@@ -235,7 +235,7 @@ def _promote_leaf_traits(engine, batch_id: str, plot_id_map: dict):
     with engine.connect() as c:
         df = pd.read_sql(
             "SELECT plot_id, collection_date, sample_name, trait::text, value, "
-            "method::text, handling::text, units::text, error, error_type::text "
+            "method::text, handling::text, units::text, error, error_type::text, doi "
             "FROM vswir_plants_staging.leaf_traits WHERE batch_id = %(batch_id)s",
             c, params={"batch_id": batch_id}
         )

@@ -10,7 +10,7 @@ CREATE TABLE vswir_plants.campaign (
 -- one campaign many dois
 -- what level do we integrate dois, campaign, trait etc
 CREATE TABLE vswir_plants.doi (
-    doi VARCHAR PRIMARY KEY,
+    doi VARCHAR NOT NULL,
     campaign_name vswir_plants."CAMPAIGN_name" NOT NULL,
     doi_type VARCHAR,
     doi_subtype VARCHAR,
@@ -20,14 +20,12 @@ CREATE TABLE vswir_plants.doi (
     CONSTRAINT doi_pk PRIMARY KEY (doi)
 );
 
--- elevation source does it need a version?
 CREATE TABLE vswir_plants.sensor_campaign (
     campaign_name vswir_plants."CAMPAIGN_name" NOT NULL,
     sensor_name vswir_plants."Sensor_name" NOT NULL,
     elevation_source vswir_plants."ELEVATION_source" NOT NULL,
     wavelength_center FLOAT4[] NOT NULL,
     fwhm FLOAT4[] NOT NULL,
-    -- rcc FLOAT4[] can be null?
     CONSTRAINT sensor_campaign_fkey FOREIGN KEY (campaign_name)
         REFERENCES vswir_plants.campaign(campaign_name)
         ON DELETE CASCADE,
@@ -46,7 +44,6 @@ CREATE TABLE vswir_plants.plot (
 );
 
 -- a column to specify map space and raw space?
--- switch cloud condition columns to use percentage and translate neon data to use that
 -- confidence on alignment column, categorical so this would require an enum
 -- remove raster_epsg everything has to be wgs 84/ epsg 4326?
 CREATE TABLE vswir_plants.granule (
@@ -99,7 +96,7 @@ CREATE TABLE vswir_plants.plot_raster_intersect (
 );
 
 -- not all data might have the glt row and column??
--- how do we want to store coords here? should we use do a geometry column to enforce crs?
+-- how do we want to store coords here? should we use do a geometry column to enforce crs? qaqc checks handle this by checking to make sure the lat and lon valid wsg84 coordinates
 -- add cloud mask?
 CREATE TABLE vswir_plants.pixel (
     pixel_id SERIAL PRIMARY KEY,
@@ -128,7 +125,7 @@ CREATE TABLE vswir_plants.pixel (
 CREATE UNIQUE INDEX pixel_idx ON vswir_plants.pixel (plot_id, granule_id, glt_row, glt_column);
 
 
--- should I merge this into the pixel table?
+
 CREATE TABLE vswir_plants.extracted_spectra (
     pixel_id INTEGER NOT NULL,
     radiance FLOAT4[], 
@@ -138,9 +135,6 @@ CREATE TABLE vswir_plants.extracted_spectra (
     CONSTRAINT extracted_spectra_pk PRIMARY KEY (pixel_id)
 );
 
--- support other types of outputs, cwc 
--- change name to output_pixel_data_products?
--- include reflectance?
 CREATE TABLE vswir_plants.output_pixel_data_products (
     pixel_id INTEGER PRIMARY KEY, 
     fc_class vswir_plants."FRACTIONAL_class",
@@ -155,7 +149,7 @@ CREATE TABLE vswir_plants.output_pixel_data_products (
 CREATE TABLE vswir_plants.output_pixel_rfl (
     pixel_id INTEGER PRIMARY KEY,
     reflectance FLOAT4[] NOT NULL,
-    uncertainty_ref FLOAT4[] NOT NULL, --  dropped for now until included with isofit per pixel
+    uncertainty_ref FLOAT4[] NOT NULL,
     CONSTRAINT output_pixel_rfl_pixel_fkey FOREIGN KEY (pixel_id)
         REFERENCES vswir_plants.pixel(pixel_id) 
         ON DELETE CASCADE
@@ -191,7 +185,9 @@ CREATE TABLE vswir_plants.sample (
 );
 
 -- trait method to primary key, the same trait for the same sample could have several methods????
+-- trait id column address the above comment
 CREATE TABLE vswir_plants.leaf_traits (
+    trait_id SERIAL NOT NULL,
     sample_name VARCHAR NOT NULL,
     plot_id INTEGER NOT NULL, 
     collection_date DATE NOT NULL,
@@ -209,7 +205,20 @@ CREATE TABLE vswir_plants.leaf_traits (
     CONSTRAINT leaf_trait_protocol_key FOREIGN KEY (doi)
         REFERENCES vswir_plants.doi (doi)
         ON DELETE CASCADE,
-    CONSTRAINT leaf_trait_pk PRIMARY KEY (plot_id, collection_date, sample_name, trait)
+    CONSTRAINT leaf_trait_pk PRIMARY KEY (trait_id)
+    -- CONSTRAINT leaf_trait_pk PRIMARY KEY (plot_id, collection_date, sample_name, trait)
+);
+
+ALTER TABLE vswir_plants.leaf_traits
+ADD CONSTRAINT leaf_traits_unique
+UNIQUE (
+    plot_id,
+    collection_date,
+    sample_name,
+    trait,
+    method,
+    handling,
+    units
 );
 
 -- move things from traits to trait protocols?

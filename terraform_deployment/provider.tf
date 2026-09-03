@@ -1,6 +1,11 @@
 provider "aws" {
   profile = "smce-airborne"
   region  = "us-west-2"
+
+  default_tags {
+    tags = var.tags
+}
+
 }
 
 # Required for CloudFront ACM certificates

@@ -101,11 +101,33 @@ CREATE TYPE vswir_plants."TAXA" AS ENUM (
     'Salix wolfii',
     'Wyethia amplexicaulis',
     'Wyethia spp',
+    'Amelanchier alnifolia',
+    'Juniperus scopulorum',
+    'Ribes cereum',
+    'Purshia tridentata',
+    'Acer glabrum',
+    'Salix monticola',
+    'Holodiscus discolor',
+    'Dasiphora fruticosa',
+    'Lonicera involucrata',
+    'Prunus virginiana',
+    'Salix scouleriana',
+    'Sambucus racemosa',
+    'Ribes inerme',
+    'Ribes wolfii',
+    'Artemisia cana',
+    'Cornus sericea',
+    'Pseudotsuga menziessii',
+    'Pinus ponderosa',
+    'Pinus flexilis',
+    'Populus angustifolia',
     'not recorded'
 ); 
 
 CREATE TYPE vswir_plants."CAMPAIGN_name" AS ENUM (
-    'East River 2018'
+    'East River 2018',
+    'Colorado Headwaters Ecological Spectroscopy Study',
+    'SHIFT'
 );
 
 
@@ -137,19 +159,18 @@ CREATE TYPE vswir_plants."VEG_or_cover_type" AS ENUM (
     'water',
     'herbaceous clip strip - NEON',
     'woody individual',
-    -- 'Herbaceous aggregate sample'
+    'herbaceous aggregate sample'
 ); 
 
 CREATE TYPE vswir_plants."PLANT_status" AS ENUM (
-    -- 'OK', from neon data?
     'insect damaged',
     'disease damaged',
     'other damage',
     'physically damaged',
-    'not recorded',
     'flowering',
     'fruit setting',
-    'fruiting'
+    'fruiting',
+    'not recorded'
 ); 
 
 
@@ -176,9 +197,9 @@ CREATE TYPE vswir_plants."DELINEATION_method" AS ENUM (
 ); 
 
 CREATE TYPE vswir_plants."CLOUD_conditions" AS ENUM (
-    'red', -- over 33%
-    'yellow', -- 10 to 33%
-    'green', -- less than 10%
+    'over 33%',
+    '10 to 33%',
+    'less than 10%',
     'not recorded'
 ); 
 
@@ -216,8 +237,9 @@ CREATE TYPE vswir_plants."FRACTIONAL_class" AS ENUM (
     'char',
     'snow',
     'flowers',
-    'seeds'
-    -- 'not recorded'
+    'seeds',
+    'rock',
+    'not recorded'
 );
 
 CREATE TYPE vswir_plants."SUBPLOT_cover_method" AS ENUM (
@@ -226,7 +248,7 @@ CREATE TYPE vswir_plants."SUBPLOT_cover_method" AS ENUM (
     'quadrat',
     'visual assessment',
     'N/A'
-    -- 'not recorded'
+    'not recorded'
 );
 
 CREATE TYPE vswir_plants."PLOT_method" AS ENUM (
@@ -264,7 +286,7 @@ CREATE TYPE vswir_plants."Trait" AS ENUM (
     'wet weight',
     'dry weight',
     'lwc',
-    'crf',
+    'cfr',
     'chl',
     'lma',
     'lai',
@@ -281,14 +303,14 @@ CREATE TYPE vswir_plants."Trait" AS ENUM (
     'zinc',
     'aluminum',
     'sodium',
-    'd13c',
+    'd13C',
     'carbon'
 );
 
 CREATE TYPE vswir_plants."Trait_method" AS ENUM (
     'chemical analysis',
     'benchtop spectral plsr',
-    'field measured (ccm)', -- does this need (ccm)
+    'field measured',
     'weight based'
 );
 
@@ -299,7 +321,8 @@ CREATE TYPE vswir_plants."Trait_units" AS ENUM (
     'mg m-2',
     'grams dry mass per g m2',
     'concentration in percent dry mass',
-    'concentration in ppm'
+    'concentration in ppm',
+    'permil'
 );
 
 CREATE TYPE vswir_plants."CANOPY_position" AS ENUM (

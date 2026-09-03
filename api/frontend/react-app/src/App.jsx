@@ -7,6 +7,7 @@ import IngestPage from './pages/IngestPage';
 import AdminPage from './pages/AdminPage';
 import LoginButton from './components/LoginButton';
 import { useIsAdmin } from './hooks/useIsAdmin';
+import { useEnums } from './hooks/useEnums';
 import {
   getAuthCode,
   getStoredTokens,
@@ -47,6 +48,15 @@ function App() {
   );
 
   if (authState === 'loggedOut') return <LoginButton />;
+
+  // Fetch live enum values (taxa, sensor names, etc.) once the user is
+  // authenticated — merges into viewConfig.js's ENUMS in place. See
+  // src/hooks/useEnums.js for details.
+  return <AuthenticatedApp isAdmin={isAdmin} isSuperAdmin={isSuperAdmin} />;
+}
+
+function AuthenticatedApp({ isAdmin, isSuperAdmin }) {
+  useEnums();
 
   return (
     <Routes>

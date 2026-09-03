@@ -54,6 +54,7 @@ module "api" {
   cognito_user_pool_id = module.cognito.user_pool_id
   cognito_client_id    = module.cognito.user_pool_client_id
   job_status_ecr_image = var.job_status_ecr_image
+  enums_ecr_image      = var.enums_ecr_image
 }
 
 module "cognito" {

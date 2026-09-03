@@ -448,26 +448,18 @@ resource "aws_iam_role_policy_attachment" "spot_fleet" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole"
 }
 
+# Deliberately bare — no inline ingress/egress blocks. Every rule lives in its
+# own aws_security_group_rule resource below. Mixing inline rule blocks with
+# standalone aws_security_group_rule resources on the same SG causes them to
+# fight over ownership of the rule set — the inline block treats itself as
+# authoritative and tries to prune anything the standalone resources added,
+# so every `terraform apply` shows a phantom diff that never converges. (This
+# SG previously had both an inline CIDR-scoped 5432 egress rule *and* the
+# standalone SG-scoped worker_to_db rule below — two different rules for the
+# same port; the SG-scoped one is kept as the more precise of the two.)
 resource "aws_security_group" "worker" {
   name   = "pixel-worker-sg"
   vpc_id = var.vpc_id
-
-  # container only needs to talk to postgres and aws apis
-  egress {
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr_block]
-    description = "postgres"
-  }
-
-  egress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "aws apis (dynamodb, secrets manager, batch)"
-  }
 
   tags = var.tags
 }
@@ -479,7 +471,16 @@ resource "aws_security_group_rule" "worker_to_db" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.worker.id
   source_security_group_id = var.db_security_group_id
+}
 
+resource "aws_security_group_rule" "worker_to_aws_apis" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.worker.id
+  description       = "aws apis (dynamodb, secrets manager, batch)"
 }
 
 # ── Launch template — ensures sufficient EBS for the isofit Docker image ──────

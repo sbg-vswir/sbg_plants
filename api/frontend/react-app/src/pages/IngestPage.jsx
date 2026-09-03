@@ -3,7 +3,7 @@ import {
   Box, Container, Typography, Paper, Button, Stack, Chip,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   CircularProgress, Alert, Divider, Tooltip, LinearProgress, Drawer, IconButton,
-  useTheme, useMediaQuery,
+  TextField, useTheme, useMediaQuery,
 } from '@mui/material';
 import {
   Upload as UploadIcon,
@@ -30,6 +30,7 @@ const DEFAULT_FILE_SLOTS = [
 export default function IngestPage() {
   const [fileSlots, setFileSlots]         = useState(DEFAULT_FILE_SLOTS);
   const [files, setFiles]                 = useState({});
+  const [batchName, setBatchName]         = useState('');
   const [submitting, setSubmitting]       = useState(false);
   const [submitError, setSubmitError]     = useState('');
   const [submitSuccess, setSubmitSuccess] = useState('');
@@ -92,14 +93,17 @@ export default function IngestPage() {
     setSubmitError('');
     setSubmitSuccess('');
     try {
-      const result = await ingestApi.submitBatch(files);
-      setSubmitSuccess(`Batch submitted — ID: ${result.batch_id}`);
+      const trimmedName = batchName.trim();
+      const result = await ingestApi.submitBatch(files, trimmedName);
+      setSubmitSuccess(`Batch submitted — "${trimmedName}"`);
       setFiles({});
+      setBatchName('');
       fileSlots.forEach(s => {
         if (fileInputRefs.current[s.key]) fileInputRefs.current[s.key].value = '';
       });
       setBatches(prev => [{
         batch_id:    result.batch_id,
+        name:        result.name ?? trimmedName,
         status:      'PENDING',
         uploaded_by: result.uploaded_by ?? '—',
         uploaded_at: result.uploaded_at ?? new Date().toISOString(),
@@ -135,8 +139,25 @@ export default function IngestPage() {
     }
   }
 
+  async function handleDelete(batchId, name) {
+    const label = name ? `"${name}"` : `batch ${batchId.slice(0, 8)}…`;
+    if (!window.confirm(
+      `Permanently delete ${label}?\n\n` +
+      `This will delete all uploaded files from S3 and remove this record. ` +
+      `This action cannot be undone.`
+    )) return;
+    setActionError('');
+    try {
+      await ingestApi.deleteBatch(batchId);
+      setBatches(prev => prev.filter(b => b.batch_id !== batchId));
+    } catch (err) {
+      setActionError(err.message);
+    }
+  }
+
   const allFilesSelected = fileSlots.every(s => files[s.key]);
   const fileSlotKeys     = fileSlots.map(s => s.key);
+  const canSubmit         = allFilesSelected && batchName.trim().length > 0;
 
   const theme    = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -162,6 +183,24 @@ export default function IngestPage() {
           {submitSuccess && <Alert severity="success" sx={{ mb: 2 }}>{submitSuccess}</Alert>}
 
           <Stack spacing={2}>
+            <Box>
+              <Typography variant="body2" fontWeight={500} sx={{ mb: 0.5 }}>
+                Bundle Name <Typography component="span" color="error">*</Typography>
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                A short, human-readable name to help identify this bundle later (e.g. "East River 2018 — resubmit").
+              </Typography>
+              <TextField
+                value={batchName}
+                onChange={e => setBatchName(e.target.value)}
+                size="small"
+                fullWidth
+                placeholder="e.g. East River 2018 batch 3"
+              />
+            </Box>
+
+            <Divider />
+
             {fileSlots.map(slot => (
               <Box key={slot.key}>
                 <Typography variant="body2" fontWeight={500} sx={{ mb: 0.5 }}>
@@ -197,7 +236,7 @@ export default function IngestPage() {
               variant="contained"
               startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <UploadIcon />}
               onClick={handleSubmit}
-              disabled={!allFilesSelected || submitting}
+              disabled={!canSubmit || submitting}
               fullWidth
             >
               {submitting ? 'Uploading…' : 'Submit Bundle'}
@@ -257,7 +296,7 @@ export default function IngestPage() {
               <Table size="small">
                 <TableHead>
                     <TableRow sx={{ bgcolor: 'grey.50' }}>
-                      <TableCell><strong>Batch ID</strong></TableCell>
+                      <TableCell><strong>Name</strong></TableCell>
                       <TableCell><strong>Actions</strong></TableCell>
                       <TableCell><strong>Status</strong></TableCell>
                       <TableCell><strong>Submitted By</strong></TableCell>
@@ -272,6 +311,7 @@ export default function IngestPage() {
                       fileSlots={fileSlotKeys}
                       onApprove={handleApprove}
                       onReject={handleReject}
+                      onDelete={handleDelete}
                       onBatchUpdate={handleBatchUpdate}
                     />
                   ))}

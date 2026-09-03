@@ -216,7 +216,12 @@ def check_castable(df: pd.DataFrame, type_cols: dict, file_name: str) -> list[di
                         raise ValueError(f"'{val}' is not a whole number")
                     int(f)
                 elif typ == bool:
-                    if str(val).lower() not in ("true", "false", "1", "0", "yes", "no"):
+                    value = str(val).lower()
+                    if value in ("true", "1", "yes", "1.0"):
+                        df.at[idx, col] = True
+                    elif value in ("false", "0", "no", "0.0"):
+                        df.at[idx, col] = False
+                    else:
                         raise ValueError
                 elif typ == "date":
                     pd.to_datetime(str(val), dayfirst=False)

@@ -4,7 +4,7 @@ from app.db import get_connection, load_enums
 from app.s3_files import download_raw_files, parse_files, write_report
 from app.dynamo import update_status
 from app.db_refs import load_all as load_db_refs
-from app.staging import load_all as load_staging
+from app.staging import load_all as load_staging, purge_staging
 from app.checks.types import CheckContext
 from app.checks.runner import run_all as run_checks
 
@@ -106,6 +106,10 @@ def _run_qaqc(batch_id: str):
 
     # ── 5. Load into staging ──────────────────────────────────────────────────
     logger.info("QAQC PASS — loading into staging for batch_id=%s", batch_id)
+
+    # Purge any stale rows from a previous partial/failed attempt at this
+    # batch_id before loading fresh data — see staging.py::purge_staging.
+    purge_staging(conn, batch_id)
 
     # Attach wavelength arrays to campaign df for sensor_campaign staging insert
     wl_arrays   = {}

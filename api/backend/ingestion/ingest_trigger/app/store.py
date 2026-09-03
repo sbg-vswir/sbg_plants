@@ -6,6 +6,8 @@ from botocore.config import Config
 from datetime import datetime, timezone
 from functools import lru_cache
 
+from app.staging_db import purge_staging
+
 logger = logging.getLogger(__name__)
 
 REGION = os.environ.get("AWS_REGION", "us-west-2")
@@ -68,7 +70,7 @@ def get_replace_url(batch_id: str, slot: str) -> str:
     )
 
 
-def create_batch_record(batch_id: str, username: str, uploaded_at: str) -> None:
+def create_batch_record(batch_id: str, username: str, uploaded_at: str, name: str) -> None:
     """Write the initial PENDING record to DynamoDB."""
     dynamodb.put_item(
         TableName=JOB_TABLE,
@@ -76,13 +78,14 @@ def create_batch_record(batch_id: str, username: str, uploaded_at: str) -> None:
             "job_id":      {"S": batch_id},
             "job_type":    {"S": "ingestion_batch"},
             "status":      {"S": "PENDING"},
+            "name":        {"S": name},
             "uploaded_by": {"S": username},
             "uploaded_at": {"S": uploaded_at},
             "created_at":  {"S": uploaded_at},
             "files":       {"SS": list(get_file_slots().keys())},
         },
     )
-    logger.info("Created DynamoDB record batch_id=%s", batch_id)
+    logger.info("Created DynamoDB record batch_id=%s name=%r", batch_id, name)
 
 
 def invoke_qaqc(batch_id: str) -> None:
@@ -137,6 +140,47 @@ def reset_batch_for_recheck(batch_id: str) -> None:
         ExpressionAttributeValues={":s": {"S": "PENDING"}},
     )
     logger.info("Reset batch_id=%s to PENDING for recheck", batch_id)
+
+
+def delete_batch(batch_id: str) -> None:
+    """
+    Permanently delete a batch: any staged Postgres rows, all of its S3
+    objects (raw files + QAQC report, everything lives under the single
+    prefix ingestion/{batch_id}/), then the DynamoDB record.
+
+    Order matters, deliberately: staging rows and S3 objects are deleted
+    before the DynamoDB record. If any earlier step fails, the DynamoDB
+    record — the "identity" of the batch — still exists, so retrying this
+    same delete call again re-attempts everything that didn't finish, rather
+    than leaving orphaned staging rows or S3 files with nothing left
+    pointing at them.
+    """
+    purge_staging(batch_id)
+
+    prefix = f"ingestion/{batch_id}/"
+
+    continuation_token = None
+    while True:
+        list_kwargs = {"Bucket": BUCKET, "Prefix": prefix}
+        if continuation_token:
+            list_kwargs["ContinuationToken"] = continuation_token
+        resp = s3.list_objects_v2(**list_kwargs)
+
+        keys = [{"Key": obj["Key"]} for obj in resp.get("Contents", [])]
+        if keys:
+            s3.delete_objects(Bucket=BUCKET, Delete={"Objects": keys})
+            logger.info("Deleted %d S3 object(s) under %s", len(keys), prefix)
+
+        if resp.get("IsTruncated"):
+            continuation_token = resp.get("NextContinuationToken")
+        else:
+            break
+
+    dynamodb.delete_item(
+        TableName=JOB_TABLE,
+        Key={"job_id": {"S": batch_id}},
+    )
+    logger.info("Deleted DynamoDB record batch_id=%s", batch_id)
 
 
 def _deserialize(item: dict) -> dict:

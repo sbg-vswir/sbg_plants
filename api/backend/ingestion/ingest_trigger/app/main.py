@@ -14,10 +14,20 @@ from app.store import (
     get_batch,
     get_qaqc_report_presigned_url,
     reset_batch_for_recheck,
+    delete_batch,
 )
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Statuses that cannot be deleted:
+#   PENDING / QAQC_RUNNING — QAQC is fire-and-forget (InvocationType="Event")
+#     and its update_item call has no ConditionExpression, so deleting the
+#     DynamoDB record mid-run could let a later QAQC write silently recreate
+#     a zombie record. Simplest fix: don't allow deleting while active.
+#   PROMOTED — already merged into production; deleting the record would
+#     lose the audit trail of what data was promoted.
+NON_DELETABLE_STATUSES = {"PENDING", "QAQC_RUNNING", "PROMOTED"}
 
 
 def lambda_handler(event, context):
@@ -66,6 +76,10 @@ def lambda_handler(event, context):
     # POST /ingest/{batch_id}/recheck
     if method == "POST" and batch_id and path.rstrip("/").endswith("/recheck"):
         return handle_recheck(batch_id)
+
+    # DELETE /ingest/{batch_id}
+    if method == "DELETE" and batch_id and not slot:
+        return handle_delete_batch(batch_id)
 
     return respond(404, {"message": "Not found"})
 
@@ -125,16 +139,21 @@ def handle_submit(event: dict, username: str) -> dict:
     try:
         body = json.loads(event.get("body") or "{}")
         batch_id = body.get("batch_id")
+        name = body.get("name")
     except Exception:
         return respond(400, {"message": "Invalid JSON body"})
 
     if not batch_id:
         return respond(400, {"message": "batch_id is required"})
 
+    name = (name or "").strip()
+    if not name:
+        return respond(400, {"message": "name is required"})
+
     uploaded_at = datetime.now(timezone.utc).isoformat()
 
     try:
-        create_batch_record(batch_id, username, uploaded_at)
+        create_batch_record(batch_id, username, uploaded_at, name)
         invoke_qaqc(batch_id)
     except Exception:
         logger.exception("Failed to create batch record for batch_id=%s", batch_id)
@@ -142,6 +161,7 @@ def handle_submit(event: dict, username: str) -> dict:
 
     return respond(202, {
         "batch_id":    batch_id,
+        "name":        name,
         "uploaded_by": username,
         "uploaded_at": uploaded_at,
     })
@@ -201,3 +221,30 @@ def handle_recheck(batch_id: str) -> dict:
 
     logger.info("Recheck triggered for batch_id=%s", batch_id)
     return respond(202, {"message": "Recheck started", "batch_id": batch_id})
+
+
+def handle_delete_batch(batch_id: str) -> dict:
+    """DELETE /ingest/{batch_id} — permanently delete S3 files + the DynamoDB record."""
+    try:
+        batch = get_batch(batch_id)
+    except Exception:
+        logger.exception("Failed to fetch batch batch_id=%s", batch_id)
+        return respond(500, {"message": "Failed to fetch batch"})
+
+    if not batch:
+        return respond(404, {"message": "Batch not found"})
+
+    status = batch.get("status")
+    if status in NON_DELETABLE_STATUSES:
+        return respond(409, {
+            "message": f"Batches with status '{status}' cannot be deleted."
+        })
+
+    try:
+        delete_batch(batch_id)
+    except Exception:
+        logger.exception("Failed to delete batch_id=%s", batch_id)
+        return respond(500, {"message": "Failed to delete batch"})
+
+    logger.info("Deleted batch_id=%s", batch_id)
+    return respond(200, {"message": "Batch deleted", "batch_id": batch_id})

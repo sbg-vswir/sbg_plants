@@ -19,5 +19,5 @@
     "elevation_source": "ELEVATION_source"
   },
   "type_cols": {},
-  "pk_cols": ["campaign_name", "sensor_name"]
+  "pk_cols": ["campaign_name", "sensor_name", "doi"]
 }

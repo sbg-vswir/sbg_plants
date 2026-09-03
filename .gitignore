@@ -19,7 +19,8 @@ connect.sh
 colorado*/
 build_ingestion_bundle.py
 UCLA_PLANTS/
-
+.token-optimizer/
+test.py
 
 # Dependencies
 node_modules/

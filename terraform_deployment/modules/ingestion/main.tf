@@ -1,16 +1,15 @@
 # ── Shared Lambda security group ──────────────────────────────────────────────
-
+#
+# Deliberately bare — no inline ingress/egress blocks. Every rule lives in its
+# own aws_security_group_rule resource below (matching modules/rds's
+# database_sg convention). Mixing inline rule blocks with standalone
+# aws_security_group_rule resources on the same SG causes them to fight over
+# ownership of the rule set — the inline block treats itself as authoritative
+# and tries to prune anything the standalone resources added, so every
+# `terraform apply` shows a phantom diff that never converges.
 resource "aws_security_group" "ingestion_lambda" {
   name   = "vswir-plants-ingestion-lambda-sg"
   vpc_id = var.vpc_id
-
-  egress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "aws apis"
-  }
 
   tags = var.tags
 }
@@ -22,6 +21,16 @@ resource "aws_security_group_rule" "ingestion_to_db" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.ingestion_lambda.id
   source_security_group_id = var.db_security_group_id
+}
+
+resource "aws_security_group_rule" "ingestion_to_aws_apis" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.ingestion_lambda.id
+  description       = "aws apis"
 }
 
 # ── Secrets Manager secrets for DB users ──────────────────────────────────────
@@ -85,12 +94,17 @@ resource "aws_iam_role_policy" "ingest_trigger" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
+        Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
         Resource = ["${var.config_bucket_arn}/*"]
       },
       {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [var.config_bucket_arn]
+      },
+      {
         Effect = "Allow"
-        Action = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query"]
+        Action = ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Query", "dynamodb:DeleteItem"]
         Resource = [
           var.dynamodb_table_arn,
           "${var.dynamodb_table_arn}/index/job_type-index",
@@ -100,6 +114,11 @@ resource "aws_iam_role_policy" "ingest_trigger" {
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
         Resource = aws_lambda_function.qaqc.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+        Resource = aws_secretsmanager_secret.staging_db.arn
       },
       {
         Effect   = "Allow"
@@ -288,9 +307,10 @@ resource "aws_lambda_function" "ingest_trigger" {
 
   environment {
     variables = {
-      CONFIG_BUCKET      = var.config_bucket_name
-      JOB_TABLE          = var.dynamodb_table_name
-      QAQC_FUNCTION_NAME = aws_lambda_function.qaqc.function_name
+      CONFIG_BUCKET         = var.config_bucket_name
+      JOB_TABLE             = var.dynamodb_table_name
+      QAQC_FUNCTION_NAME    = aws_lambda_function.qaqc.function_name
+      STAGING_DB_SECRET_ARN = aws_secretsmanager_secret.staging_db.arn
     }
   }
 
@@ -472,6 +492,14 @@ resource "aws_apigatewayv2_route" "put_ingest_file" {
 resource "aws_apigatewayv2_route" "post_ingest_recheck" {
   api_id             = var.api_id
   route_key          = "POST /ingest/{batch_id}/recheck"
+  target             = "integrations/${aws_apigatewayv2_integration.ingest_trigger.id}"
+  authorizer_id      = var.cognito_authorizer_id
+  authorization_type = "JWT"
+}
+
+resource "aws_apigatewayv2_route" "delete_ingest_batch" {
+  api_id             = var.api_id
+  route_key          = "DELETE /ingest/{batch_id}"
   target             = "integrations/${aws_apigatewayv2_integration.ingest_trigger.id}"
   authorizer_id      = var.cognito_authorizer_id
   authorization_type = "JWT"

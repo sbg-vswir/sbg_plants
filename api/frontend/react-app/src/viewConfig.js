@@ -11,6 +11,25 @@
 
 // ---------------------------------------------------------------------------
 // Shared enum option lists
+//
+// These are seeded from the DB at build time and used as the initial/fallback
+// values shown before GET /enums resolves (or if it fails). Once that request
+// resolves, useEnums() (src/hooks/useEnums.js) REFILLS these arrays IN PLACE
+// (via .splice, never reassignment) with live values from the
+// Postgres enum catalog — see api/backend/enums_api/app/main.py::ENUM_KEY_MAP
+// for the full list of what's queryable and how each Postgres enum type name
+// maps to a key below.
+//
+// Because VIEW_CONFIG.filters[].options below and LinkedFilterPanel.jsx both
+// hold/read a reference to these same array objects (not copies), mutating
+// them in place is what lets fresh enum values reach every filter dropdown
+// with no other code changes. Do not do `ENUMS.taxa = [...]` anywhere — that
+// breaks the shared reference and the mutation will stop propagating.
+//
+// Adding a new VALUE to an existing enum (e.g. a new taxa species) requires
+// no changes here — it appears automatically once added to the DB. Adding a
+// brand new enum CATEGORY still requires a new entry here, a matching entry
+// in ENUM_KEY_MAP, and a filter definition wherever it should be used.
 // ---------------------------------------------------------------------------
 
 export const ENUMS = {

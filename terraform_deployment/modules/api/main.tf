@@ -344,9 +344,13 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "vswir_plants_conf
   bucket = aws_s3_bucket.vswir_plants_config.id
 
   rule {
+    bucket_key_enabled = false
+
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
+
+    blocked_encryption_types = ["SSE-C"]
   }
 }
 
@@ -707,6 +711,109 @@ resource "aws_lambda_permission" "job_status_apigw" {
   statement_id  = "AllowAPIGatewayInvokeJobStatus"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.job_status.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.vswir_plants.execution_arn}/*/*"
+}
+
+# -----------------------------
+# Enums Lambda — GET /enums
+#
+# Serves enum option lists (taxa, sensor names, etc.) queried live from the
+# Postgres enum catalog, so new enum VALUES can be added to the DB without
+# redeploying the frontend or backend. See api/backend/enums_api/app/main.py
+# for the list of exposed enum types.
+# -----------------------------
+
+resource "aws_iam_role" "enums_lambda_role" {
+  name = "vswir-plants-enums-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy" "enums_lambda_policy" {
+  name = "enums-lambda-policy"
+  role = aws_iam_role.enums_lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = aws_secretsmanager_secret.vswir_plants_db.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "enums_vpc_access" {
+  role       = aws_iam_role.enums_lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_lambda_function" "enums" {
+  function_name = "vswir-plants-enums"
+  role          = aws_iam_role.enums_lambda_role.arn
+  package_type  = "Image"
+  image_uri     = var.enums_ecr_image
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [aws_security_group.lambda_sg.id]
+  }
+
+  memory_size = 256
+  timeout     = 15
+
+  environment {
+    variables = {
+      DB_SECRET_ARN = aws_secretsmanager_secret.vswir_plants_db.arn
+    }
+  }
+
+  tags = var.tags
+}
+
+resource "aws_apigatewayv2_integration" "enums" {
+  api_id                 = aws_apigatewayv2_api.vswir_plants.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.enums.invoke_arn
+  payload_format_version = "1.0"
+}
+
+resource "aws_apigatewayv2_route" "enums_route" {
+  api_id             = aws_apigatewayv2_api.vswir_plants.id
+  route_key          = "GET /enums"
+  target             = "integrations/${aws_apigatewayv2_integration.enums.id}"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+  authorization_type = "JWT"
+}
+
+resource "aws_lambda_permission" "enums_apigw" {
+  statement_id  = "AllowAPIGatewayInvokeEnums"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.enums.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.vswir_plants.execution_arn}/*/*"
 }

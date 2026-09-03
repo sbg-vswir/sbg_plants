@@ -205,6 +205,15 @@ export async function pollJobStatus(jobId, mode = 'single') {
 }
 
 /**
+ * GET /enums — enum option lists (taxa, sensor names, etc.) queried live
+ * from the database, keyed the same way as viewConfig.js's ENUMS object.
+ */
+export async function fetchEnums() {
+  const response = await client.get('/enums');
+  return response.data;
+}
+
+/**
  * Admin API calls
  */
 export const adminApi = {
@@ -294,7 +303,7 @@ export const ingestApi = {
     client.get('/ingest/config').then(r => r.data),
 
   // Upload a bundle of files via presigned S3 URLs — returns { batch_id }
-  submitBatch: async (files) => {
+  submitBatch: async (files, name) => {
     // 1. Request presigned PUT URLs + a batch_id from the Lambda
     const { batch_id, upload_urls } = await client.post('/ingest/upload-urls').then(r => r.data);
 
@@ -314,7 +323,7 @@ export const ingestApi = {
     );
 
     // 3. Notify the Lambda that files are ready — creates DynamoDB record + invokes QAQC
-    return client.post('/ingest', { batch_id }).then(r => r.data);
+    return client.post('/ingest', { batch_id, name }).then(r => r.data);
   },
 
   // List all batches for the current user
@@ -352,4 +361,9 @@ export const ingestApi = {
   // Re-trigger QAQC on a QAQC_FAIL batch after files have been corrected
   recheckBatch: (batchId) =>
     client.post(`/ingest/${batchId}/recheck`).then(r => r.data),
+
+  // Permanently delete a batch — removes S3 files and the DynamoDB record.
+  // Only allowed for QAQC_PASS / QAQC_FAIL / REJECTED batches (enforced server-side).
+  deleteBatch: (batchId) =>
+    client.delete(`/ingest/${batchId}`).then(r => r.data),
 };

@@ -21,6 +21,7 @@ GRANT SELECT ON vswir_plants_staging.granule_view            TO postgrest_user;
 GRANT SELECT ON vswir_plants_staging.extracted_spectra_view  TO postgrest_user;
 GRANT SELECT ON vswir_plants_staging.extracted_metadata_view TO postgrest_user;
 GRANT SELECT ON vswir_plants_staging.reflectance_view        TO postgrest_user;
+GRANT SELECT ON vswir_plants_staging.pixel                   TO postgrest_user;
 
 -- ---------------------------------------------------------------------------
 -- isofit
