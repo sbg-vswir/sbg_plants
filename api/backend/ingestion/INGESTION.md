@@ -110,6 +110,7 @@ intersection. Accepted geometry types are **Point** and **Polygon**.
 | `extraction_method` | `plot_raster_intersect` | No | `EXTRACTION_method` |
 | `delineation_method` | `plot_raster_intersect` | No | `DELINEATION_method` |
 | `shape_aligned_to_granule` | `plot_raster_intersect` | No | |
+| `polygon_confidence` | `plot_raster_intersect` | No | `POLYGON_confidence` |
 
 `granule_id` must exist in `granule_metadata.csv` in this bundle or in `granule` in the database.
 
@@ -231,7 +232,7 @@ exist in `plot_raster_intersect` (from this bundle or the database).
 | `lon` | `pixel` | No |
 | `lat` | `pixel` | No |
 | `elevation` | `pixel` | No |
-| `shade_mask` | `pixel` | No |
+| `shade_mask` | `pixel` | Yes |
 | `path_length` | `pixel` | No |
 | `to_sensor_azimuth` | `pixel` | No |
 | `to_sensor_zenith` | `pixel` | No |

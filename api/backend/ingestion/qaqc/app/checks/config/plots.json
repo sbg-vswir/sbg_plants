@@ -7,7 +7,8 @@
     "granule_id",
     "extraction_method",
     "delineation_method",
-    "shape_aligned_to_granule"
+    "shape_aligned_to_granule",
+    "polygon_confidence"
   ],
   "nullable_props": [
     "plot_method"
@@ -16,7 +17,8 @@
     "campaign_name":      "CAMPAIGN_name",
     "extraction_method":  "EXTRACTION_method",
     "delineation_method": "DELINEATION_method",
-    "plot_method":        "PLOT_method"
+    "plot_method":        "PLOT_method",
+    "polygon_confidence": "POLYGON_confidence"
   },
   "required_cols": [],
   "nullable_cols": [],

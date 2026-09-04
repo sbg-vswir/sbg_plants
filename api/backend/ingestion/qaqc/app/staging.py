@@ -49,23 +49,19 @@ def _coerce_int(series: pd.Series) -> pd.Series:
 _BOOL_TRUTHY = {"true", "t", "yes", "y", "on", "1"}
 
 def _coerce_bool(series: pd.Series) -> pd.Series:
-    """
-    Parse a string-typed boolean column into real Python bools. Values are
-    tried as numbers first (so "1.0"/"0.0" — the exact form a spreadsheet
-    export produces for a 0/1 flag — resolve by value, nonzero == True) and
-    fall back to token matching for text like "True"/"false"/"yes"/"no".
-    Blank "" and anything unrecognized is treated as False, matching how
-    this file's one pre-existing hand-rolled version of this logic
-    (shape_aligned_to_granule) already behaved.
-    """
-    def to_bool(val) -> bool:
+    def to_bool(val):
+        if pd.isna(val):
+            return None
+
         s = str(val).strip().lower()
         if not s:
-            return False
+            return None
+
         try:
             return float(s) != 0
         except ValueError:
             return s in _BOOL_TRUTHY
+
     return series.apply(to_bool)
 
 
@@ -338,6 +334,7 @@ def _load_plot_raster_intersect(conn, gdf: gpd.GeoDataFrame, plot_id_map: dict, 
         "extraction_method":        gdf["extraction_method"],
         "delineation_method":       gdf["delineation_method"],
         "shape_aligned_to_granule": _coerce_bool(gdf["shape_aligned_to_granule"]),
+        "polygon_confidence": gdf["polygon_confidence"],
         "batch_id":                 batch_id,
     })
     out = out.dropna(subset=["plot_id", "plot_shape_id"])

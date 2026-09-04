@@ -130,6 +130,7 @@ CREATE TABLE vswir_plants_staging.plot_raster_intersect (
     delineation_method       vswir_plants."DELINEATION_method" NOT NULL,
     shape_aligned_to_granule BOOLEAN                           NOT NULL,
     batch_id                 VARCHAR                           NOT NULL,
+    polygon_confidence vswir_plants."POLYGON_confidence" NOT NULL,
     CONSTRAINT staging_plot_raster_intersect_pk PRIMARY KEY (plot_id, granule_id, batch_id),
     CONSTRAINT staging_pri_granule_fkey FOREIGN KEY (granule_id, batch_id)
         REFERENCES vswir_plants_staging.granule(granule_id, batch_id)
@@ -151,7 +152,7 @@ CREATE TABLE vswir_plants_staging.pixel (
     granule_id        VARCHAR NOT NULL,
     glt_row           INTEGER NOT NULL,
     glt_column        INTEGER NOT NULL,
-    shade_mask        BOOLEAN NOT NULL,
+    shade_mask        BOOLEAN,
     path_length       FLOAT4  NOT NULL,
     to_sensor_azimuth FLOAT4  NOT NULL,
     to_sensor_zenith  FLOAT4  NOT NULL,

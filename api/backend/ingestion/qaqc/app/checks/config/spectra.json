@@ -10,7 +10,6 @@
     "lon",
     "lat",
     "elevation",
-    "shade_mask",
     "path_length",
     "to_sensor_azimuth",
     "to_sensor_zenith",
@@ -22,7 +21,7 @@
     "utc_time",
     "cosine_i"
   ],
-  "nullable_cols": [],
+  "nullable_cols": ["shade_mask"],
   "enum_cols": {
     "campaign_name": "CAMPAIGN_name"
   },

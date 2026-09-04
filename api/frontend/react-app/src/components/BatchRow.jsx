@@ -38,14 +38,20 @@ export default function BatchRow({ batch, fileSlots, onApprove, onReject, onDele
   const isActive = batch.status === 'PENDING' || batch.status === 'QAQC_RUNNING';
   const isFail   = batch.status === 'QAQC_FAIL';
 
+  // A report exists once QAQC has completed (QAQC_PASS/QAQC_FAIL, and the
+  // downstream PROMOTED/REJECTED states which carry the same report
+  // forward) — never while PENDING/QAQC_RUNNING or mid-recheck.
+  const hasReport = !rechecking && !isActive &&
+    !!(batch.qaqc_report_presigned_url || batch.qaqc_report_s3_key || batch.qaqc_report);
+
   // Clear the rechecking flag once the QAQC run completes
   useEffect(() => {
     if (rechecking && !isActive) setRechecking(false);
   }, [batch.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch full S3 report when a QAQC_FAIL row is expanded
+  // Fetch full S3 report when a completed row (pass or fail) is expanded
   useEffect(() => {
-    if (!expanded || !isFail) return;
+    if (!expanded || !hasReport) return;
     setFullReport(null);
 
     if (batch.qaqc_report_presigned_url) {
@@ -66,9 +72,8 @@ export default function BatchRow({ batch, fileSlots, onApprove, onReject, onDele
     }
   }, [expanded, batch.status, batch.qaqc_report_s3_key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Only show a report for terminal states that actually have one.
-  // Never show a stale report while active or rechecking.
-  const displayReport = (!rechecking && isFail)
+  // Report content itself — null while there's nothing to show yet.
+  const displayReport = hasReport
     ? (fullReport || batch.qaqc_report)
     : null;
 
@@ -104,11 +109,11 @@ export default function BatchRow({ batch, fileSlots, onApprove, onReject, onDele
         </TableCell>
         <TableCell>
           <Stack direction="row" spacing={0.5}>
-            {isFail && (
+            {hasReport && (
               <Button
                 size="small"
                 variant="outlined"
-                color="error"
+                color={isFail ? 'error' : 'inherit'}
                 onClick={() => setExpanded(e => !e)}
                 sx={{ textTransform: 'none' }}
               >
@@ -143,7 +148,7 @@ export default function BatchRow({ batch, fileSlots, onApprove, onReject, onDele
                 </Tooltip>
               </>
             )}
-            {!isFail && (
+            {!hasReport && (
               <IconButton size="small" onClick={() => setExpanded(e => !e)}>
                 {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
               </IconButton>
@@ -182,7 +187,7 @@ export default function BatchRow({ batch, fileSlots, onApprove, onReject, onDele
               <Divider sx={{ mt: 1 }} />
               <QaqcReport
                 report={displayReport}
-                loading={isFail && expanded && !fullReport && !!(batch.qaqc_report_presigned_url || batch.qaqc_report_s3_key)}
+                loading={hasReport && expanded && !fullReport && !!(batch.qaqc_report_presigned_url || batch.qaqc_report_s3_key)}
               />
               {isFail && (
                 <>

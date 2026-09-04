@@ -83,6 +83,7 @@ CREATE TABLE vswir_plants.plot_raster_intersect (
     extraction_method vswir_plants."EXTRACTION_method" NOT NULL,
     delineation_method vswir_plants."DELINEATION_method" NOT NULL,
     shape_aligned_to_granule BOOLEAN NOT NULL,
+    polygon_confidence vswir_plants."POLYGON_confidence" NOT NULL,
     CONSTRAINT raster_plot_event_granule_id_fkey FOREIGN KEY (granule_id)
         REFERENCES vswir_plants.granule(granule_id)
         ON DELETE CASCADE,
@@ -104,7 +105,7 @@ CREATE TABLE vswir_plants.pixel (
     granule_id VARCHAR NOT NULL,
     glt_row INTEGER NOT NULL,
     glt_column INTEGER NOT NULL,
-    shade_mask BOOLEAN NOT NULL,
+    shade_mask BOOLEAN,
     path_length FLOAT4 NOT NULL,
     to_sensor_azimuth FLOAT4 NOT NULL,
     to_sensor_zenith FLOAT4 NOT NULL,

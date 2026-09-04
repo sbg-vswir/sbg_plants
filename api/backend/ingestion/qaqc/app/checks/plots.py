@@ -36,6 +36,14 @@ from app.checks.universal import load_config
 
 CONFIG = load_config("plots")
 
+# Minimum properties needed to build a valid (campaign_name, plot_name)
+# FK key for plot_id_map / plot_shape_map. If any of these are missing or
+# blank, the plot cannot be registered at all — but a missing prop outside
+# this set (e.g. polygon_confidence) should still be reported as its own
+# error without blocking registration, so downstream FK checks in
+# spectra.py/traits.py don't cascade misleading "not found" errors.
+CORE_PROPS = ["campaign_name", "plot_name", "site_id", "granule_id"]
+
 
 def _is_blank(val) -> bool:
     """True if val is None, NaN, or an empty/whitespace-only string."""
@@ -60,6 +68,7 @@ def check(context: CheckContext) -> CheckResult:
     plot_shape_map = {}
     plot_id_map    = {}
     seen_intersect_keys = set()
+    skipped_core_missing = 0
 
     all_granule_ids = (
         context.output.get("granule_id_set", set())
@@ -80,7 +89,8 @@ def check(context: CheckContext) -> CheckResult:
         errors   += prop_errors
         warnings += prop_warnings
         if props is None:
-            continue  # missing required props — skip FK/uniqueness checks
+            skipped_core_missing += 1
+            continue  # missing core identity props — cannot build FK key
 
         fk_errors, intersect_key = _check_feature_fk_and_uniqueness(
             props, feat_num, all_granule_ids,
@@ -95,6 +105,16 @@ def check(context: CheckContext) -> CheckResult:
                 "site_id":     props["site_id"],
                 "plot_method": props.get("plot_method"),
             }
+
+    if skipped_core_missing:
+        n = len(gdf_plots)
+        warnings.append(_e(
+            None,
+            f"{skipped_core_missing}/{n} plot feature"
+            f"{'s' if skipped_core_missing != 1 else ''} skipped from FK "
+            f"matching due to missing/blank core properties "
+            f"({', '.join(CORE_PROPS)})",
+        ))
 
     _forward_plot_maps(plot_shape_map, plot_id_map, context)
     errors  += _check_existing_plots(plot_id_map, context)
@@ -154,8 +174,17 @@ def _check_properties(
     """
     Validate a row's properties (all columns except geometry) against config.
     Returns (errors, warnings, props_dict).
-    Returns (errors, warnings, None) if required properties are missing —
-    callers should skip FK and uniqueness checks in that case.
+    Returns (errors, warnings, None) only if a *core* identity property
+    (see CORE_PROPS) is missing/blank — those are needed to build the
+    (campaign_name, plot_name) FK key, so callers must skip FK/uniqueness
+    checks and registration in that case.
+
+    A missing/blank *non-core* required property (e.g. polygon_confidence)
+    is still reported as an error here, but does NOT block registering the
+    plot in plot_id_map/plot_shape_map — otherwise a single unrelated
+    missing property on the plots file would cascade into misleading
+    "not found in plots.geojson or database" errors for every spectra/traits
+    row referencing that plot.
     """
     props          = row.drop(labels=[geom_col]).to_dict()
     required_props = CONFIG.get("required_props", [])
@@ -168,7 +197,11 @@ def _check_properties(
 
     missing = [p for p in required_props if p not in props or _is_blank(props[p])]
     if missing:
-        return [_e(feat_num, f"missing required properties: {', '.join(missing)}")], [], None
+        errors.append(_e(feat_num, f"missing required properties: {', '.join(missing)}"))
+
+    missing_core = [p for p in CORE_PROPS if p not in props or _is_blank(props[p])]
+    if missing_core:
+        return errors, [], None
 
     for prop, enum_type in enum_props.items():
         val = props.get(prop)
