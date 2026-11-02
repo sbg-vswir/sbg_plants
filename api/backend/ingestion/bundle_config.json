@@ -5,6 +5,7 @@
     "granule_metadata":   ".csv",
     "plots":              ".geojson",
     "traits":             ".csv",
-    "spectra":            ".csv"
+    "spectra":            ".csv",
+    "doi":                ".csv"
   }
 }

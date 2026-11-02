@@ -21,6 +21,7 @@ import MapView from '../components/MapView';
 import LinkedFilterPanel from '../components/LinkedFilterPanel';
 import PlotSidePanel from '../components/PlotSidePanel';
 import LinkedDataTable from '../components/LinkedDataTable';
+import CitationsPanel from '../components/CitationsPanel';
 import SpectraJobStatus from '../components/SpectraJobStatus';
 import JobHistory from '../components/JobHistory';
 import AlgorithmPanel from '../components/AlgorithmPanel';
@@ -306,6 +307,8 @@ function DataProductsPage() {
                   totalGranules={q.totalGranules}
                 />
               )}
+
+              {hasResults && <CitationsPanel citations={q.citations} />}
             </Box>
           </Box>
         </Box>

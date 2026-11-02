@@ -10,6 +10,7 @@ CREATE TABLE vswir_plants.campaign (
 -- same doi can have several rows, several dois can share a role
 -- citation_text is only for a doi that cannot be looked up online*
 -- plot_method null on a plot_method row = protocol covers every plot method
+-- site_ids null on a plot_information/plot_shapes row = covers every site; stored sorted
 CREATE TABLE vswir_plants.doi (
     doi_id SERIAL PRIMARY KEY,
     campaign_name   vswir_plants."CAMPAIGN_name" NOT NULL,
@@ -20,31 +21,41 @@ CREATE TABLE vswir_plants.doi (
     plot_method     vswir_plants."PLOT_method",
     trait_method    vswir_plants."Trait_method",
     trait           vswir_plants."Trait",
+    site_ids        VARCHAR[],
     CONSTRAINT doi_campaign_fkey FOREIGN KEY (campaign_name)
         REFERENCES vswir_plants.campaign(campaign_name)
         ON DELETE CASCADE,
     CONSTRAINT doi_format_chk CHECK (
         doi ~ '^10\.[0-9]{4,9}/\S+$'),
+    CONSTRAINT doi_site_ids_chk CHECK (
+        site_ids IS NULL OR cardinality(site_ids) > 0),
     CONSTRAINT doi_scope_chk CHECK (
         CASE
             WHEN role IN ('radiance_dataset', 'pixel_shade_mask') THEN plot_method IS NULL AND trait_method IS NULL AND trait IS NULL
+                                         AND site_ids IS NULL
+            WHEN role IN ('plot_information', 'plot_shapes') THEN sensor_name IS NULL AND plot_method IS NULL
+                                         AND trait_method IS NULL AND trait IS NULL
             WHEN role = 'plot_method'      THEN sensor_name IS NULL
                                          AND trait_method IS NULL AND trait IS NULL
+                                         AND site_ids IS NULL
             WHEN role = 'trait_method'     THEN trait_method IS NOT NULL AND trait IS NOT NULL
                                          AND sensor_name IS NULL
                                          AND plot_method IS NULL
+                                         AND site_ids IS NULL
             WHEN role = 'trait_data'       THEN trait IS NOT NULL
                                          AND sensor_name IS NULL
                                          AND plot_method IS NULL
+                                         AND site_ids IS NULL
             ELSE sensor_name IS NULL
                  AND plot_method IS NULL AND trait_method IS NULL AND trait IS NULL
+                 AND site_ids IS NULL
         END
     )
 );
 
 -- no duplicate rows, null scopes and doi case are treated as equal
 CREATE UNIQUE INDEX doi_unique ON vswir_plants.doi
-    (campaign_name, lower(doi), role, sensor_name, plot_method, trait_method, trait) NULLS NOT DISTINCT;
+    (campaign_name, lower(doi), role, sensor_name, plot_method, trait_method, trait, site_ids) NULLS NOT DISTINCT;
 
 CREATE TABLE vswir_plants.sensor_campaign (
     campaign_name vswir_plants."CAMPAIGN_name" NOT NULL,

@@ -358,6 +358,94 @@ def _fetch_granules(plot_ids_page, granule_filters, schema: str):
 
 
 # ---------------------------------------------------------------------------
+# Citations — DOIs that apply to everything the query matched
+# ---------------------------------------------------------------------------
+
+def _fetch_citations(plot_ids, trait_filters, granule_filters, schema: str):
+    """
+    Return the doi rows whose role + scope match what is actually in the
+    result set. Runs over ALL matching plot_ids (not just the page) so the
+    citations cover everything the user can download.
+
+    Each doi row is a rule; a NULL scope means the whole campaign:
+      radiance_dataset / pixel_shade_mask → a granule of that sensor is in the results
+      plot_information / plot_shapes      → a plot from one of its site_ids
+      plot_method                         → a plot with that plot_method
+      trait_method                        → that (trait, method)
+      trait_data                          → that trait (and method, if set)
+      anything else                       → the campaign has plots in the results
+    """
+    cte_sql, pixel_fragment, granule_params = _granule_cte_and_where(granule_filters, plot_ids, schema)
+
+    plot_clauses, plot_params = [], []
+    _build_array_in_clause("plot_id", plot_ids, plot_clauses, plot_params)
+
+    trait_where, trait_params = _trait_where(trait_filters, plot_ids)
+    trait_fragment = trait_where.lstrip().removeprefix("WHERE").strip()
+
+    sql = f"""
+        {cte_sql},
+        sensors_used AS (
+            SELECT DISTINCT fg.campaign_name, fg.sensor_name
+            FROM filtered_granules fg
+            JOIN "{schema}".pixel px ON px.granule_id = fg.granule_id
+            WHERE {pixel_fragment}
+        ),
+        plots_used AS (
+            SELECT DISTINCT campaign_name, plot_method, site_id
+            FROM "{schema}".plot_shape_view
+            WHERE {plot_clauses[0]}
+        ),
+        traits_used AS (
+            SELECT DISTINCT campaign_name, trait, method
+            FROM "{schema}".trait_view
+            WHERE {trait_fragment}
+              AND trait IS NOT NULL  -- trait_view LEFT JOINs leaf_traits
+        )
+        SELECT DISTINCT d.campaign_name::text, d.doi, d.citation_text, d.role::text,
+               d.sensor_name::text, d.plot_method::text, d.trait::text, d.trait_method::text,
+               d.site_ids
+        FROM "{schema}".doi d
+        WHERE d.campaign_name::text IN (SELECT campaign_name::text FROM plots_used)
+          AND CASE
+            WHEN d.role IN ('radiance_dataset', 'pixel_shade_mask') THEN EXISTS (
+                SELECT 1 FROM sensors_used s
+                WHERE s.campaign_name::text = d.campaign_name::text
+                  AND (d.sensor_name IS NULL OR s.sensor_name = d.sensor_name))
+            WHEN d.role IN ('plot_information', 'plot_shapes') THEN EXISTS (
+                SELECT 1 FROM plots_used p
+                WHERE p.campaign_name::text = d.campaign_name::text
+                  AND (d.site_ids IS NULL OR p.site_id = ANY(d.site_ids)))
+            WHEN d.role = 'plot_method' THEN EXISTS (
+                SELECT 1 FROM plots_used p
+                WHERE p.campaign_name::text = d.campaign_name::text
+                  AND (d.plot_method IS NULL OR p.plot_method = d.plot_method))
+            WHEN d.role = 'trait_method' THEN EXISTS (
+                SELECT 1 FROM traits_used t
+                WHERE t.campaign_name::text = d.campaign_name::text
+                  AND t.trait = d.trait AND t.method = d.trait_method)
+            WHEN d.role = 'trait_data' THEN EXISTS (
+                SELECT 1 FROM traits_used t
+                WHERE t.campaign_name::text = d.campaign_name::text AND t.trait = d.trait
+                  AND (d.trait_method IS NULL OR t.method = d.trait_method))
+            ELSE TRUE
+          END
+        ORDER BY 1, 4, 2
+    """
+    # placeholder order: granule CTE, pixel fragment, plots_used, traits_used
+    params = list(granule_params) + plot_params + list(trait_params)
+    logger.debug("Citations SQL: %s", sql)
+
+    with get_connection() as conn:
+        df = pd.read_sql(sql, conn, params=params)
+
+    return [
+        {k: (None if not isinstance(v, list) and pd.isna(v) else v) for k, v in row.items()}
+        for row in df.to_dict("records")
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -407,17 +495,25 @@ def run_linked_query(body: dict, schema: str = "vswir_plants") -> dict:
             "plots":             [],
             "traits":            [],
             "granules":          [],
+            "citations":         [],
         }
 
     # Stage 2 — parallel COUNT queries (traits, granules+pixels, csv row total).
     # None of these transfer raw rows/arrays — only small aggregate results.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+    # Citations depend on the full result set, not the page, so they're only
+    # computed on the first page and the frontend keeps them while paging.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         trait_count_future    = pool.submit(_count_traits, all_plot_ids, trait_filters, schema)
         granule_pixel_future  = pool.submit(_count_granules_and_pixels, all_plot_ids, granule_filters, schema)
         csv_rows_future       = pool.submit(_total_csv_rows, all_plot_ids, trait_filters, granule_filters, schema)
+        citations_future      = (
+            pool.submit(_fetch_citations, all_plot_ids, trait_filters, granule_filters, schema)
+            if offset == 0 else None
+        )
         total_traits   = trait_count_future.result()
         total_granules, total_pixel_count = granule_pixel_future.result()
         total_csv_rows = csv_rows_future.result()
+        citations      = citations_future.result() if citations_future else None
 
     # Stage 3 — paginate
     truncated     = total_plots > (offset + limit)
@@ -447,5 +543,7 @@ def run_linked_query(body: dict, schema: str = "vswir_plants") -> dict:
         "traits":            page_traits,
         "granules":          page_granules,
     }
+    if citations is not None:
+        response["citations"] = citations
     response.update(plots_payload)
     return response

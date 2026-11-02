@@ -15,9 +15,7 @@ Checks (in order):
                           must not already exist in production.
   6. No existing leaf_trait — (campaign_name, plot_name, collection_date,
                                sample_name, trait) must not already exist in production.
-  7. DOI FK — each non-blank doi must resolve to the production doi table or
-              to a doi submitted in this same bundle's campaign_metadata.csv.
-  8. Duplicate rows — (sample_name, plot_name, collection_date, trait, method,
+  7. Duplicate rows — (sample_name, plot_name, collection_date, trait, method,
                        handling, units) must be unique within the bundle.
                        A single leaf_traits row has no natural-key uniqueness
                        constraint in the DB (trait_id is a surrogate serial —
@@ -57,7 +55,6 @@ def check(context: CheckContext) -> CheckResult:
     errors += _check_no_existing_samples(df, context)
     errors += _check_no_existing_leaf_traits(df, context)
     errors += _check_trait_fields(df)
-    errors += _check_doi_fk(df, context)
     errors += _check_duplicate_rows(df)
     return CheckResult("traits", len(df), errors, warnings)
 
@@ -191,29 +188,6 @@ def _check_trait_fields(df: pd.DataFrame) -> list[dict]:
                 ),
             })
 
-    return errors
-
-
-def _check_doi_fk(df: pd.DataFrame, context: CheckContext) -> list[dict]:
-    """
-    Each non-blank doi must resolve to the production doi table or to a doi
-    submitted in this same bundle's campaign_metadata.csv. Blank doi is
-    allowed — not every trait row is tied to a specific DOI.
-    """
-    if "doi" not in df.columns:
-        return []
-
-    valid_dois = context.db["doi_set"] | context.output.get("doi_set", set())
-    errors = []
-    for idx, row in df.iterrows():
-        doi_val = row.get("doi")
-        if pd.isna(doi_val) or str(doi_val).strip() == "":
-            continue
-        if doi_val not in valid_dois:
-            errors.append({
-                "file": "traits", "row": int(idx + 2), "column": "doi",
-                "message": f"doi '{doi_val}' not found in bundle campaign_metadata.csv or database",
-            })
     return errors
 
 

@@ -53,31 +53,41 @@ CREATE TABLE vswir_plants_staging.doi (
     plot_method   vswir_plants."PLOT_method",
     trait_method  vswir_plants."Trait_method",
     trait         vswir_plants."Trait",
+    site_ids      VARCHAR[],
     batch_id      VARCHAR                       NOT NULL,
     CONSTRAINT staging_doi_campaign_fkey FOREIGN KEY (campaign_name, batch_id)
         REFERENCES vswir_plants_staging.campaign(campaign_name, batch_id)
         ON DELETE CASCADE,
     CONSTRAINT staging_doi_format_chk CHECK (
         doi ~ '^10\.[0-9]{4,9}/\S+$'),
+    CONSTRAINT staging_doi_site_ids_chk CHECK (
+        site_ids IS NULL OR cardinality(site_ids) > 0),
     CONSTRAINT staging_doi_scope_chk CHECK (
         CASE
             WHEN role IN ('radiance_dataset', 'pixel_shade_mask') THEN plot_method IS NULL AND trait_method IS NULL AND trait IS NULL
+                                         AND site_ids IS NULL
+            WHEN role IN ('plot_information', 'plot_shapes') THEN sensor_name IS NULL AND plot_method IS NULL
+                                         AND trait_method IS NULL AND trait IS NULL
             WHEN role = 'plot_method'      THEN sensor_name IS NULL
                                          AND trait_method IS NULL AND trait IS NULL
+                                         AND site_ids IS NULL
             WHEN role = 'trait_method'     THEN trait_method IS NOT NULL AND trait IS NOT NULL
                                          AND sensor_name IS NULL
                                          AND plot_method IS NULL
+                                         AND site_ids IS NULL
             WHEN role = 'trait_data'       THEN trait IS NOT NULL
                                          AND sensor_name IS NULL
                                          AND plot_method IS NULL
+                                         AND site_ids IS NULL
             ELSE sensor_name IS NULL
                  AND plot_method IS NULL AND trait_method IS NULL AND trait IS NULL
+                 AND site_ids IS NULL
         END
     )
 );
 
 CREATE UNIQUE INDEX staging_doi_unique ON vswir_plants_staging.doi
-    (campaign_name, lower(doi), role, sensor_name, plot_method, trait_method, trait, batch_id) NULLS NOT DISTINCT;
+    (campaign_name, lower(doi), role, sensor_name, plot_method, trait_method, trait, site_ids, batch_id) NULLS NOT DISTINCT;
 
 -- ── sensor_campaign ───────────────────────────────────────────────────────────
 

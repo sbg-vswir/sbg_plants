@@ -13,6 +13,7 @@ GRANT SELECT ON vswir_plants.pixel                   TO postgrest_user;
 GRANT SELECT ON vswir_plants.extracted_spectra_view  TO postgrest_user;
 GRANT SELECT ON vswir_plants.extracted_metadata_view TO postgrest_user;
 GRANT SELECT ON vswir_plants.reflectance_view        TO postgrest_user;
+GRANT SELECT ON vswir_plants.doi                     TO postgrest_user;
 
 -- Staging views (schema-toggle feature — admin+ users only, enforced in the API)
 GRANT SELECT ON vswir_plants_staging.plot_shape_view         TO postgrest_user;
@@ -22,6 +23,7 @@ GRANT SELECT ON vswir_plants_staging.extracted_spectra_view  TO postgrest_user;
 GRANT SELECT ON vswir_plants_staging.extracted_metadata_view TO postgrest_user;
 GRANT SELECT ON vswir_plants_staging.reflectance_view        TO postgrest_user;
 GRANT SELECT ON vswir_plants_staging.pixel                   TO postgrest_user;
+GRANT SELECT ON vswir_plants_staging.doi                     TO postgrest_user;
 
 -- ---------------------------------------------------------------------------
 -- isofit

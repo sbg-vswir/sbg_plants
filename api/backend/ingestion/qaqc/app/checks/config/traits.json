@@ -22,8 +22,7 @@
     "value",
     "method",
     "handling",
-    "units",
-    "doi"
+    "units"
   ],
   "enum_cols": {
     "campaign_name":        "CAMPAIGN_name",

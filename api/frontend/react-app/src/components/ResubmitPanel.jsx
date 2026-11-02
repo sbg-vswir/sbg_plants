@@ -12,6 +12,7 @@ const DEFAULT_FILE_SLOTS = [
   { key: 'plots',             label: 'Plots',               accept: '.geojson,.json' },
   { key: 'traits',            label: 'Traits',              accept: '.csv' },
   { key: 'spectra',           label: 'Spectra',             accept: '.csv' },
+  { key: 'doi',               label: 'DOIs',                accept: '.csv' },
 ];
 
 export default function ResubmitPanel({ batchId, fileSlots, failingFiles, onReplaced, onRecheck }) {

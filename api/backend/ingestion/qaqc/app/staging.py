@@ -153,7 +153,7 @@ def load_all(conn, batch_id: str, dfs: dict) -> dict:
     row_counts = {}
     with staging_transaction(conn):
         row_counts["campaign"]              = _load_campaign(conn, dfs["campaign_metadata"], batch_id)
-        row_counts["doi"]                   = _load_doi(conn, dfs["campaign_metadata"], batch_id)
+        row_counts["doi"]                   = _load_doi(raw, dfs["doi"], batch_id)
         row_counts["sensor_campaign"]       = _load_sensor_campaign(raw, dfs["campaign_metadata"], batch_id)
         row_counts["granule"]               = _load_granule(conn, dfs["granule_metadata"], batch_id)
         shape_id_map                        = _load_plot_shapes(conn, dfs["plot_geometry"], batch_id)
@@ -189,26 +189,33 @@ def _load_campaign(conn, df: pd.DataFrame, batch_id: str) -> int:
 
 def _load_doi(conn, df: pd.DataFrame, batch_id: str) -> int:
     """
-    Insert DOI rows from campaign_metadata.csv into the doi staging table.
-    Each row in the CSV that has a non-blank doi value becomes one doi record.
-    doi_type and doi_subtype are nullable.
+    Insert doi.csv rows into the doi staging table, one row per csv row.
+    Uses execute_values because site_ids is a VARCHAR[] array. site_ids
+    arrives already normalized (sorted, ';'-joined) from checks/doi.py, and
+    duplicates were already rejected there, so nothing is deduped here.
     """
-    doi_cols = ["campaign_name", "doi", "doi_type", "doi_subtype"]
-    available = [c for c in doi_cols if c in df.columns]
-    out = (
-        df[available]
-        .replace("", None)
-        .dropna(subset=["doi"])
-        .drop_duplicates(subset=["doi"])
-        .assign(batch_id=batch_id)
-    )
-    if out.empty:
+    if df.empty:
         return 0
-    out.to_sql(
-        "doi", conn, schema="vswir_plants_staging",
-        if_exists="append", index=False, method="multi",
-    )
-    return len(out)
+    cols = ["campaign_name", "doi", "citation_text", "role",
+            "sensor_name", "plot_method", "trait", "trait_method"]
+
+    def _val(row, col):
+        val = row.get(col, "")
+        return None if pd.isna(val) or str(val).strip() == "" else str(val).strip()
+
+    rows = [
+        tuple(_val(row, c) for c in cols)
+        + ((_val(row, "site_ids").split(";") if _val(row, "site_ids") else None), batch_id)
+        for _, row in df.iterrows()
+    ]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, """
+            INSERT INTO vswir_plants_staging.doi
+                (campaign_name, doi, citation_text, role, sensor_name, plot_method,
+                 trait, trait_method, site_ids, batch_id)
+            VALUES %s
+        """, rows)
+    return len(rows)
 
 
 def _load_sensor_campaign(conn, df: pd.DataFrame, batch_id: str) -> int:
@@ -406,14 +413,8 @@ def _load_leaf_traits(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) 
     trait_cols = [
         "campaign_name", "plot_name", "collection_date", "sample_name",
         "trait", "value", "method", "handling", "units", "error", "error_type",
-        "doi",
     ]
-    # doi is optional per-bundle (leaf_traits.doi is nullable, and its FK to
-    # doi(doi, batch_id) is simply not enforced when NULL) — same pattern
-    # _load_doi already uses. Filtering to available columns here, rather
-    # than assuming "doi" always exists in df, is what _load_doi already
-    # does defensively; this one didn't, and failed with a KeyError the
-    # first time a bundle's traits.csv genuinely omitted the column.
+    # error / error_type are nullable and may be omitted from traits.csv
     available_trait_cols = [c for c in trait_cols if c in df.columns]
     has_trait = df["trait"].notna() & (df["trait"].astype(str).str.strip() != "")
     out = (

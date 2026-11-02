@@ -35,7 +35,7 @@ def promote(conn, batch_id: str):
     with conn:
         logger.info("Promoting campaign + sensor_campaign")
         _promote_campaign(engine, conn, batch_id)
-        _promote_doi(engine, conn, batch_id)
+        _promote_doi(conn, batch_id)
 
         logger.info("Promoting granule")
         _promote_granule(engine, batch_id)
@@ -76,18 +76,22 @@ def _promote_campaign(engine, conn, batch_id: str):
     )
 
 
-def _promote_doi(engine, conn, batch_id: str):
-    df = pd.read_sql(
-        "SELECT doi, campaign_name, doi_type, doi_subtype "
-        "FROM vswir_plants_staging.doi WHERE batch_id = %s",
-        conn, params=(batch_id,)
-    )
-    if df.empty:
-        return
-    df.to_sql(
-        "doi", engine, schema="vswir_plants",
-        if_exists="append", index=False, method="multi",
-    )
+def _promote_doi(conn, batch_id: str):
+    """
+    Single INSERT ... SELECT so the site_ids VARCHAR[] array copies as-is.
+    doi_id comes from the production SERIAL. campaign_name is VARCHAR in
+    staging and the CAMPAIGN_name enum in production, hence the cast.
+    """
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO vswir_plants.doi
+                (campaign_name, doi, citation_text, role, sensor_name, plot_method,
+                 trait_method, trait, site_ids)
+            SELECT campaign_name::vswir_plants."CAMPAIGN_name", doi, citation_text, role,
+                   sensor_name, plot_method, trait_method, trait, site_ids
+            FROM vswir_plants_staging.doi
+            WHERE batch_id = %s
+        """, (batch_id,))
 
 
 def _promote_sensor_campaign(conn, batch_id: str):
@@ -235,7 +239,7 @@ def _promote_leaf_traits(engine, batch_id: str, plot_id_map: dict):
     with engine.connect() as c:
         df = pd.read_sql(
             "SELECT plot_id, collection_date, sample_name, trait::text, value, "
-            "method::text, handling::text, units::text, error, error_type::text, doi "
+            "method::text, handling::text, units::text, error, error_type::text "
             "FROM vswir_plants_staging.leaf_traits WHERE batch_id = %(batch_id)s",
             c, params={"batch_id": batch_id}
         )

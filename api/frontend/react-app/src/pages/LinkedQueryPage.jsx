@@ -21,6 +21,7 @@ import MapView from '../components/MapView';
 import LinkedFilterPanel from '../components/LinkedFilterPanel';
 import PlotSidePanel from '../components/PlotSidePanel';
 import LinkedDataTable from '../components/LinkedDataTable';
+import CitationsPanel from '../components/CitationsPanel';
 import SpectraJobStatus from '../components/SpectraJobStatus';
 import StagingToggle from '../components/StagingToggle';
 import SpectraControls from '../components/SpectraControls';
@@ -273,6 +274,8 @@ function LinkedQueryPage() {
                   totalGranules={q.totalGranules}
                 />
               )}
+
+              {hasResults && <CitationsPanel citations={q.citations} />}
             </Box>
           </Box>
         </Box>

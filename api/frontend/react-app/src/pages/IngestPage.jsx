@@ -23,6 +23,7 @@ const DEFAULT_FILE_SLOTS = [
   { key: 'plots',             label: 'Plots',               accept: '.geojson,.json', hint: 'plots.geojson — FeatureCollection of plot-granule intersection polygons (EPSG:4326)' },
   { key: 'traits',            label: 'Traits',              accept: '.csv',           hint: 'traits.csv — one row per trait measurement' },
   { key: 'spectra',           label: 'Spectra',             accept: '.csv',           hint: 'spectra.csv — one row per pixel with positional band columns (0, 1, 2 …)' },
+  { key: 'doi',               label: 'DOIs',                accept: '.csv',           hint: 'doi.csv — one row per DOI per thing it covers (header row only if there are none)' },
 ];
 
 // ── Page ──────────────────────────────────────────────────────────────────────

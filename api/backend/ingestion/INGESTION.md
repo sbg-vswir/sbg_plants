@@ -2,7 +2,7 @@
 
 ## Overview
 
-Data is submitted as a bundle of 6 files. Files are validated asynchronously against the
+Data is submitted as a bundle of 7 files. Files are validated asynchronously against the
 production database, loaded into a staging schema on success, and promoted to production
 after admin review and approval. If validation fails, individual files can be replaced and
 re-checked without starting over.
@@ -15,6 +15,7 @@ re-checked without starting over.
 | `plots.geojson` | `plot_shape`, `plot`, `plot_raster_intersect` |
 | `traits.csv` | `insitu_plot_event`, `sample`, `leaf_traits` |
 | `spectra.csv` | `pixel`, `extracted_spectra` |
+| `doi.csv` | `doi` |
 
 ---
 
@@ -23,7 +24,8 @@ re-checked without starting over.
 ### `campaign_metadata.csv`
 
 One row per campaign + sensor combination. Campaign-level fields (`primary_funding_source`,
-`data_repository`, `doi`, `taxa_system`) repeat across rows when a campaign has multiple sensors.
+`data_repository`, `taxa_system`) repeat across rows when a campaign has multiple sensors.
+DOIs are submitted separately in [`doi.csv`](#doicsv).
 
 | Column | Table | Nullable | Enum |
 |--------|-------|----------|------|
@@ -33,9 +35,6 @@ One row per campaign + sensor combination. Campaign-level fields (`primary_fundi
 | `taxa_system` | `campaign` | Yes | |
 | `sensor_name` | `sensor_campaign` | No | `Sensor_name` |
 | `elevation_source` | `sensor_campaign` | No | `ELEVATION_source` |
-| `doi` | `campaign` | Yes | |
-| `doi_type` | `campaign` | Yes | |
-| `doi_subtype` | `campaign` | Yes | |
 
 **Primary key:** `(campaign_name, sensor_name)`
 
@@ -250,6 +249,57 @@ exist in `plot_raster_intersect` (from this bundle or the database).
 
 ---
 
+### `doi.csv`
+
+One row per DOI per thing it covers. Each row is a rule: "cite this DOI when the query results
+contain X". `role` says what part of the data the DOI covers, and the scope columns narrow it to
+part of the campaign. **A blank scope column means the whole campaign** (all sensors, all plot
+methods, all sites). The same DOI can appear on several rows. If a campaign has no DOIs, submit
+the file with only the header row.
+
+| Column | Nullable | Enum | Notes |
+|--------|----------|------|-------|
+| `campaign_name` | No | `CAMPAIGN_name` | Must be a campaign in this bundle's `campaign_metadata.csv` |
+| `doi` | No | | Bare DOI, e.g. `10.3334/ORNLDAAC/1234` — no `https://doi.org/` or `doi:` prefix |
+| `citation_text` | Yes | | Full citation, only for a DOI that can't be looked up online |
+| `role` | No | `DOI_role` | See the table below |
+| `sensor_name` | Yes | `Sensor_name` | |
+| `plot_method` | Yes | `PLOT_method` | |
+| `trait` | Yes | `Trait` | |
+| `trait_method` | Yes | `Trait_method` | Matches the `method` column in `traits.csv` |
+| `site_ids` | Yes | | `;`-separated list of `site_id` values from `plots.geojson`, e.g. `W01;W02;W03` |
+
+**Which scope columns each role allows** ("—" = must be blank):
+
+| role | sensor_name | plot_method | trait | trait_method | site_ids |
+|------|-------------|-------------|-------|--------------|----------|
+| `campaign_overview` | — | — | — | — | — |
+| `plot_information` | — | — | — | — | optional |
+| `plot_shapes` | — | — | — | — | optional |
+| `radiance_dataset` | optional | — | — | — | — |
+| `pixel_shade_mask` | optional | — | — | — | — |
+| `plot_method` | — | optional | — | — | — |
+| `trait_method` | — | — | **required** | **required** | — |
+| `trait_data` | — | — | **required** | optional | — |
+
+`trait_data` cites who produced the measurements; `trait_method` cites how they were made. A
+trait can have either, both or neither. Use `site_ids` when different sites' plots are published
+under different DOIs (e.g. a wetland team and a terrestrial team).
+
+**Example:**
+```csv
+campaign_name,doi,citation_text,role,sensor_name,plot_method,trait,trait_method,site_ids
+SHIFT,10.1234/shift,,campaign_overview,,,,,
+SHIFT,10.1234/aviris,,radiance_dataset,AVIRIS-NG,,,,
+SHIFT,10.1234/n-method,,trait_method,,,nitrogen,combustion,
+SHIFT,10.1234/wetland-plots,,plot_information,,,,,W01;W02;W03
+SHIFT,10.1234/terrestrial-plots,,plot_information,,,,,T01;T02;T03
+```
+
+**Primary key:** `(campaign_name, lower(doi), role, sensor_name, plot_method, trait, trait_method, site_ids)`
+
+---
+
 ## Processing Order
 
 Files are validated and staged in strict dependency order. Steps marked with `*` capture
@@ -279,6 +329,8 @@ database-generated IDs and pass them to the next dependent step.
        sample                               extracted_spectra  ← pixel_id
        leaf_traits
 ```
+
+`doi.csv` is loaded right after `campaign` (step 1) — it only depends on the campaign row.
 
 ---
 
@@ -361,6 +413,19 @@ single report — the pipeline does not stop at the first failing file.
 | No existing pixels in database | Same key must not already exist in production `pixel` |
 | Pixel coordinates within WGS84 bounds | `lon`/`lat` must be within −180..180 and −90..90. Out-of-bounds coordinates are a blocking error |
 | Pixel footprint intersects plot shape | A GSD × GSD square centred on the pixel centroid (`lon`/`lat`) must intersect the plot polygon. Matches rioxarray `all_touched=True` semantics — edge pixels whose footprint overlaps the boundary are accepted. Falls back to a centroid-only check if GSD is unknown. Pixels outside the plot are a **warning**, reported as a bucketed summary by distance from the boundary (< 1 m, 1–10 m, 10–100 m, > 100 m) |
+
+### `doi.csv`
+
+| Check | Detail |
+|-------|--------|
+| DOI format | `doi` must be a bare DOI matching `10.<4–9 digits>/...` |
+| Scope columns match the role | Required scope columns are set and any scope column the role doesn't allow is blank (see the role table under the file spec) |
+| No duplicate DOI rows | `(campaign_name, doi, role, scopes)` must be unique. DOIs compare case-insensitively and `site_ids` lists compare after sorting |
+| `campaign_name` in bundle | Must be a campaign in this bundle's `campaign_metadata.csv` |
+| Scopes exist | `sensor_name` must be a sensor for that campaign in `campaign_metadata.csv`; `plot_method` and each `site_ids` entry must appear in `plots.geojson`; `trait` (and `trait_method`) must appear in `traits.csv` |
+| Site coverage (warning) | If a campaign's `plot_information` / `plot_shapes` DOIs all use `site_ids`, each plot site not listed in any of them produces a warning |
+
+`site_ids` is normalized during QAQC (trimmed, deduplicated and sorted) before it is staged.
 
 ### Cross-file checks
 
@@ -598,7 +663,8 @@ update — no code deploy.
     "granule_metadata":   ".csv",
     "plots":              ".geojson",
     "traits":             ".csv",
-    "spectra":            ".csv"
+    "spectra":            ".csv",
+    "doi":                ".csv"
   }
 }
 ```

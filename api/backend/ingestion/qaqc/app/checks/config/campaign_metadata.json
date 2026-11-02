@@ -7,9 +7,6 @@
   ],
   "nullable_cols": [
     "data_repository",
-    "doi",
-    "doi_type",
-    "doi_subtype",
     "taxa_system"
   ],
   "enum_cols": {
@@ -19,5 +16,5 @@
     "elevation_source": "ELEVATION_source"
   },
   "type_cols": {},
-  "pk_cols": ["campaign_name", "sensor_name", "doi"]
+  "pk_cols": ["campaign_name", "sensor_name"]
 }

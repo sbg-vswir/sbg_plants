@@ -58,7 +58,7 @@ def _stringify_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 def parse_files(raw: dict) -> tuple:
     """
     Parse raw bytes into DataFrames and a GeoDataFrame.
-    Returns (df_campaign, df_wl, df_granule, df_traits, df_spectra, gdf_plots)
+    Returns (df_campaign, df_wl, df_granule, df_traits, df_spectra, gdf_plots, df_doi)
     Raises ValueError if any file cannot be parsed.
     """
     try:
@@ -67,11 +67,12 @@ def parse_files(raw: dict) -> tuple:
         df_granule  = pd.read_csv(io.BytesIO(raw["granule_metadata"]),  dtype=str).fillna("")
         df_traits   = pd.read_csv(io.BytesIO(raw["traits"]),            dtype=str).fillna("")
         df_spectra  = pd.read_csv(io.BytesIO(raw["spectra"]),           dtype=str).fillna("")
+        df_doi      = pd.read_csv(io.BytesIO(raw["doi"]),               dtype=str).fillna("")
         gdf_plots = _stringify_properties(gpd.read_file(io.BytesIO(raw["plots"])))
     except Exception as e:
         raise ValueError(f"Failed to parse bundle files: {e}") from e
 
-    return df_campaign, df_wl, df_granule, df_traits, df_spectra, gdf_plots
+    return df_campaign, df_wl, df_granule, df_traits, df_spectra, gdf_plots, df_doi
 
 
 def write_report(batch_id: str, status: str, qaqc_report: dict) -> str:

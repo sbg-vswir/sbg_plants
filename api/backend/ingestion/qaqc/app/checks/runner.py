@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from app.checks import campaign, wavelengths, granule, plots, traits, spectra, cross_file
+from app.checks import campaign, wavelengths, granule, plots, traits, spectra, doi, cross_file
 from app.checks.types import CheckContext, CheckResult
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ CHECKS = [
     plots,
     traits,
     spectra,
+    doi,  # reads campaign_sensor_set and the plots/traits data
     cross_file,
 ]
 

@@ -35,7 +35,7 @@ def _run_qaqc(batch_id: str):
     raw_files = download_raw_files(batch_id)
 
     try:
-        df_campaign, df_wl, df_granule, df_traits, df_spectra, gdf_plots = parse_files(raw_files)
+        df_campaign, df_wl, df_granule, df_traits, df_spectra, gdf_plots, df_doi = parse_files(raw_files)
     except ValueError as e:
         report = {"_parse_error": {"row_count": 0, "errors": [
             {"file": "_parse_error", "row": None, "column": None, "message": str(e)}
@@ -67,6 +67,7 @@ def _run_qaqc(batch_id: str):
             "plots":             gdf_plots,
             "traits":            df_traits,
             "spectra":           df_spectra,
+            "doi":               df_doi,
         },
         output={
             # Seed band counts so SpectraCheck can find them even if
@@ -93,6 +94,7 @@ def _run_qaqc(batch_id: str):
         "samples":            unique_samples,
         "traits":             trait_rows,
         "pixels":             int(df_spectra.shape[0]),
+        "dois":               int(df_doi.shape[0]),
     }
 
     # ── 4. Write full report to S3 ────────────────────────────────────────────
@@ -131,6 +133,7 @@ def _run_qaqc(batch_id: str):
         "granule_metadata":  df_granule,
         "traits":            df_traits,
         "spectra":           df_spectra,
+        "doi":               df_doi,
         "plots_props":       gdf_plots.drop(columns=gdf_plots.geometry.name),
         "plot_geometry":     gdf_plots
     }

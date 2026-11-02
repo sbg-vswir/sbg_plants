@@ -1,0 +1,25 @@
+{
+  "required_cols": [
+    "campaign_name",
+    "doi",
+    "role"
+  ],
+  "nullable_cols": [
+    "citation_text",
+    "sensor_name",
+    "plot_method",
+    "trait",
+    "trait_method",
+    "site_ids"
+  ],
+  "enum_cols": {
+    "campaign_name": "CAMPAIGN_name",
+    "role":          "DOI_role",
+    "sensor_name":   "Sensor_name",
+    "plot_method":   "PLOT_method",
+    "trait":         "Trait",
+    "trait_method":  "Trait_method"
+  },
+  "type_cols": {},
+  "pk_cols": []
+}

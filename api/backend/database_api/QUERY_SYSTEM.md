@@ -170,9 +170,18 @@ Extract Spectra — it hits all plots at once.
   "truncated": true,
   "plots_geojson": { "type": "FeatureCollection", "features": [...] },
   "traits": [{ "plot_id": 1, "trait": "LMA", "value": 0.012, ... }],
-  "granules": [{ "granule_id": "...", "plot_ids": [1,2,3], "pixel_ids": [101,102,...] }]
+  "granules": [{ "granule_id": "...", "plot_ids": [1,2,3], "pixel_ids": [101,102,...] }],
+  "citations": [{ "campaign_name": "SHIFT", "doi": "10.1234/shift", "citation_text": null,
+                  "role": "campaign_overview", "sensor_name": null, "plot_method": null,
+                  "trait": null, "trait_method": null, "site_ids": null }]
 }
 ```
+
+`citations` lists the DOIs (from the `doi` table) that apply to **all** matching plots, not just
+the current page: a row is included when its role + scope matches what the results contain (see
+`_fetch_citations` in `orchestration.py` and `schema/DOI_INTEGRATION.md`). It is only computed
+on the first page (`offset` 0) and omitted on later pages; the frontend keeps the first page's
+list while paging.
 
 ---
 

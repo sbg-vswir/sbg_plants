@@ -53,6 +53,7 @@ export function useLinkedQuery() {
   const [hasQueried, setHasQueried] = useState(false);
   const [traits,   setTraits]   = useState([]);
   const [granules, setGranules] = useState([]);
+  const [citations, setCitations] = useState([]);  // DOIs for the whole result set, not just the page
   const [totalPlots,    setTotalPlots]    = useState(0);
   const [totalTraits,   setTotalTraits]   = useState(0);
   const [totalGranules, setTotalGranules] = useState(0);
@@ -150,6 +151,9 @@ export function useLinkedQuery() {
       setHasQueried(true);
       setTraits(data.traits    ?? []);
       setGranules(data.granules ?? []);
+      // The backend only computes citations on the first page (offset 0);
+      // keep the ones we have while paging.
+      if ((payload.offset ?? 0) === 0) setCitations(data.citations ?? []);
       setTotalPlots(data.total_plots    ?? 0);
       setTotalTraits(data.total_traits   ?? 0);
       setTotalGranules(data.total_granules ?? 0);
@@ -194,6 +198,7 @@ export function useLinkedQuery() {
     setHasQueried(false);
     setTraits([]);
     setGranules([]);
+    setCitations([]);
     setTotalPlots(0);
     setTotalTraits(0);
     setTotalGranules(0);
@@ -355,7 +360,7 @@ export function useLinkedQuery() {
     handleReset, handleApply, handleNext, handlePrev,
 
     // Response
-    plots, traits, granules,
+    plots, traits, granules, citations,
     totalPlots, totalTraits, totalGranules,
     truncated, loading, error, setError,
     hasQueried,
