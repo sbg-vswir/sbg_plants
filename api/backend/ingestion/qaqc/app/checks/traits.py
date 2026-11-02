@@ -9,13 +9,15 @@ Checks (in order):
   2. Plot FK — each (campaign_name, plot_name) must resolve to this bundle
                or the production database.
   3. Conditional field — error_type is required whenever error is set.
-  4. No existing insitu_plot_event — (campaign_name, plot_name, collection_date)
-                                     must not already exist in production.
-  5. No existing sample — (campaign_name, plot_name, collection_date, sample_name)
-                          must not already exist in production.
-  6. No existing leaf_trait — (campaign_name, plot_name, collection_date,
-                               sample_name, trait) must not already exist in production.
-  7. Duplicate rows — (sample_name, plot_name, collection_date, trait, method,
+  4. Existing plot events / samples / leaf traits — rows already in production
+     follow the reuse-if-identical rule (universal.check_existing_identical):
+       insitu_plot_event  key (campaign_name, plot_name, collection_date)
+       sample             key + sample_name
+       leaf_traits        key + sample_name, trait, method, handling, units
+                          (the production leaf_traits_unique key)
+     Identical → reused (not staged again), different → error.
+  5. Trait fields — trait, value, method, handling, units are all set or all blank.
+  6. Duplicate rows — (sample_name, plot_name, collection_date, trait, method,
                        handling, units) must be unique within the bundle.
                        A single leaf_traits row has no natural-key uniqueness
                        constraint in the DB (trait_id is a surrogate serial —
@@ -26,9 +28,6 @@ Checks (in order):
                        fields) collapse to the same key when repeated for the
                        same sample and are still flagged — a sample must not
                        be declared more than once.
-
-  Checks 4–6 emit one error dict per violating row with a consistent message
-  so the frontend's compressErrors() groups them into a bold 'Rows X-Y' summary.
 """
 
 from __future__ import annotations
@@ -37,23 +36,36 @@ import pandas as pd
 
 from app.checks.types import CheckContext, CheckResult
 from app.checks.universal import (
-    load_config, run_mechanical_checks, check_foreign_key,
+    load_config, run_mechanical_checks, check_foreign_key, check_existing_identical,
 )
+from app.db_refs import PLOT_EVENT_KEY, SAMPLE_KEY, LEAF_TRAIT_KEY
 
 CONFIG = load_config("traits")
 CONFIG["_file_name"] = "traits"
 
 _DUP_KEY_COLS = ["sample_name", "plot_name", "collection_date", "trait", "method", "handling", "units"]
 
+PLOT_EVENT_COLS = {"plot_veg_type": "str", "subplot_cover_method": "str", "floristic_survey": "bool"}
+SAMPLE_COLS     = {
+    "taxa": "str", "veg_or_cover_type": "str", "phenophase": "str", "sample_fc_class": "str",
+    "sample_fc_percent": "int", "plant_status": "str", "canopy_position": "str",
+}
+LEAF_TRAIT_COLS = {"value": "float", "error": "float", "error_type": "str"}
+
 
 def check(context: CheckContext) -> CheckResult:
     df     = context.data["traits"]
     errors, warnings = run_mechanical_checks(df, context.enums, CONFIG)
+    if any("missing required columns" in e["message"] for e in errors):
+        return CheckResult("traits", len(df), errors, warnings)
+    for col in ["trait", "value", "method", "handling", "units", "error", "error_type"]:
+        if col not in df.columns:
+            df[col] = ""
     errors += _check_plot_fk(df, context)
     errors += _check_error_type_conditional(df)
-    errors += _check_no_existing_plot_events(df, context)
-    errors += _check_no_existing_samples(df, context)
-    errors += _check_no_existing_leaf_traits(df, context)
+    existing_errors, existing_warnings = _check_existing_rows(df, context)
+    errors   += existing_errors
+    warnings += existing_warnings
     errors += _check_trait_fields(df)
     errors += _check_duplicate_rows(df)
     return CheckResult("traits", len(df), errors, warnings)
@@ -87,79 +99,29 @@ def _check_error_type_conditional(df: pd.DataFrame) -> list[dict]:
     return errors
 
 
-def _check_no_existing_plot_events(df: pd.DataFrame, context: CheckContext) -> list[dict]:
+def _check_existing_rows(df: pd.DataFrame, context: CheckContext) -> tuple[list[dict], list[dict]]:
     """
-    (campaign_name, plot_name, collection_date) must not already exist in
-    production insitu_plot_event. One error per violating row with a consistent
-    message so the frontend groups them into a bold Rows X-Y summary.
+    Reuse-if-identical for plot events, samples and leaf traits already in
+    production. Forwards the per-row "already in production" masks as
+    context.output["existing"][table] for the staging load.
     """
-    db_set = context.db["insitu_plot_event_set"]
-    seen   = set()
-    errors = []
-    for idx, row in df.iterrows():
-        key = (row["campaign_name"], row["plot_name"], str(row["collection_date"]).strip())
-        if key in seen:
-            continue
-        seen.add(key)
-        if key in db_set:
-            errors.append({
-                "file": "traits", "row": int(idx + 2), "column": None,
-                "message": "insitu_plot_event already exists in database",
-            })
-    return errors
-
-
-def _check_no_existing_samples(df: pd.DataFrame, context: CheckContext) -> list[dict]:
-    """
-    (campaign_name, plot_name, collection_date, sample_name) must not already
-    exist in production sample.
-    """
-    db_set = context.db["sample_set"]
-    seen   = set()
-    errors = []
-    for idx, row in df.iterrows():
-        key = (
-            row["campaign_name"], row["plot_name"],
-            str(row["collection_date"]).strip(), row["sample_name"],
+    has_trait = df["trait"].astype(str).str.strip() != ""
+    checks = [
+        ("insitu_plot_event", df,            PLOT_EVENT_KEY, PLOT_EVENT_COLS, "insitu_plot_event_rows", "plot event"),
+        ("sample",            df,            SAMPLE_KEY,     SAMPLE_COLS,     "sample_rows",            "sample"),
+        ("leaf_traits",       df[has_trait], LEAF_TRAIT_KEY, LEAF_TRAIT_COLS, "leaf_trait_rows",        "leaf trait"),
+    ]
+    errors, warnings = [], []
+    existing_out = context.output.setdefault("existing", {})
+    for table, rows, key_cols, compare_cols, db_name, label in checks:
+        e, w, existing = check_existing_identical(
+            rows, key_cols, compare_cols, context.db[db_name], "traits", label,
         )
-        if key in seen:
-            continue
-        seen.add(key)
-        if key in db_set:
-            errors.append({
-                "file": "traits", "row": int(idx + 2), "column": None,
-                "message": "sample already exists in database",
-            })
-    return errors
+        errors   += e
+        warnings += w
+        existing_out[table] = existing.reindex(df.index, fill_value=False)
+    return errors, warnings
 
-
-def _check_no_existing_leaf_traits(df: pd.DataFrame, context: CheckContext) -> list[dict]:
-    """
-    (campaign_name, plot_name, collection_date, sample_name, trait) must not
-    already exist in production leaf_traits.
-
-    Rows with no trait data are sample-only rows and are skipped.
-    """
-    db_set = context.db["leaf_trait_set"]
-    errors = []
-
-    for idx, row in df.iterrows():
-        if pd.isna(row["trait"]) or str(row["trait"]).strip() == "":
-            continue
-
-        key = (
-            row["campaign_name"], row["plot_name"],
-            str(row["collection_date"]).strip(), row["sample_name"],
-            str(row["trait"]),
-        )
-
-        if key in db_set:
-            errors.append({
-                "file": "traits", "row": int(idx + 2), "column": None,
-                "message": "leaf_trait already exists in database",
-            })
-
-    return errors
 
 def _check_trait_fields(df: pd.DataFrame) -> list[dict]:
     """Trait fields must either all be populated or all be blank."""

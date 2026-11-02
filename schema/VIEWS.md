@@ -2,6 +2,12 @@
 
 All views live in the `vswir_plants` schema. Grants are managed separately in `grant.sql`.
 
+Staging copies of these views (`plants_v5_staging_views.sql`) have the same columns. Because a
+staged batch can add to data already in production (samples on an existing plot, spectra on an
+existing granule), they join staged rows to parents in staging ∪ production, through the helper
+views `vswir_plants_staging.all_plot` and `all_granule`. Staging `extracted_metadata_view` lists
+staged and production calibrations.
+
 ---
 
 ## 1. `trait_view`
@@ -110,6 +116,7 @@ Campaign/sensor metadata (`wavelength_center`, `fwhm`) is available separately v
 | `granule_id` | `granule` | |
 | `campaign_name` | `granule` | |
 | `sensor_name` | `granule` | |
+| `sensor_date` | `granule` | sensor calibration the granule uses |
 | `acquisition_date` | `granule` | |
 | `acquisition_start_time` | `granule` | |
 | `cloudy_conditions` | `granule` | |
@@ -137,6 +144,7 @@ worker Lambda, and uploads results as a CSV to S3.
 | `pixel_id` | `extracted_spectra` |
 | `campaign_name` | `granule` |
 | `sensor_name` | `granule` |
+| `sensor_date` | `granule` |
 | `granule_id` | `pixel` |
 | `acquisition_date` | `granule` |
 | `acquisition_start_time` | `granule` |
@@ -165,7 +173,9 @@ worker Lambda, and uploads results as a CSV to S3.
 **Purpose:** Exposes sensor wavelength centers and FWHM values used by the frontend to
 build spectra CSV column headers. Used by `GET /query/metadata`.
 
-**Row count:** One row per `(campaign, sensor)`.
+**Row count:** One row per sensor calibration `(campaign, sensor, sensor_date)`. Match it to
+spectra through the granule's `sensor_date` — a sensor can have several calibrations with
+different band counts, so `(campaign, sensor)` alone is not enough.
 
 **Columns:**
 
@@ -173,6 +183,7 @@ build spectra CSV column headers. Used by `GET /query/metadata`.
 |---|---|
 | `campaign_name` | `sensor_campaign` |
 | `sensor_name` | `sensor_campaign` |
+| `sensor_date` | `sensor_campaign` | date the calibration took effect |
 | `elevation_source` | `sensor_campaign` |
 | `wavelength_center` | `sensor_campaign` | `FLOAT4[]` — one value per band |
 | `fwhm` | `sensor_campaign` | `FLOAT4[]` — one value per band |
@@ -193,6 +204,7 @@ build spectra CSV column headers. Used by `GET /query/metadata`.
 | `pixel_id` | `output_pixel_rfl` |
 | `campaign_name` | `granule` |
 | `sensor_name` | `granule` |
+| `sensor_date` | `granule` |
 | `granule_id` | `pixel` |
 | `acquisition_date` | `granule` |
 | `acquisition_start_time` | `granule` |

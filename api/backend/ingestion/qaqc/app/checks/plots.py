@@ -12,9 +12,10 @@ Checks (in order):
        e. Granule FK — granule_id must resolve to this bundle or the DB.
        f. Uniqueness — (campaign_name, plot_name, granule_id) must be unique
                        within the file and must not already exist in the DB.
-  3. Existing plot warning — (campaign_name, plot_name) already in production
-                             plot table. Not an error since plots are reused
-                             across granules (ON CONFLICT DO NOTHING).
+  3. Existing plot — (campaign_name, plot_name) already in production follows
+                     the reuse-if-identical rule: same site_id / plot_method →
+                     reused (a new granule over an existing plot), different →
+                     error.
   4. Forward plot_shape_map and plot_id_map for traits.py and spectra.py.
 
 Config (checks/config/plots.json) declares required_props, nullable_props,
@@ -29,10 +30,12 @@ there is no longer a real None sentinel coming out of the source data.
 from __future__ import annotations
 
 import geopandas as gpd
+import pandas as pd
 from shapely.validation import make_valid
 
 from app.checks.types import CheckContext, CheckResult
-from app.checks.universal import load_config
+from app.checks.universal import load_config, check_existing_identical
+from app.db_refs import PLOT_KEY
 
 CONFIG = load_config("plots")
 
@@ -117,7 +120,9 @@ def check(context: CheckContext) -> CheckResult:
         ))
 
     _forward_plot_maps(plot_shape_map, plot_id_map, context)
-    errors  += _check_existing_plots(plot_id_map, context)
+    existing_errors, existing_warnings = _check_existing_plots(gdf_plots, context)
+    errors   += existing_errors
+    warnings += existing_warnings
     return CheckResult("plots", len(gdf_plots), errors, warnings)
 
 
@@ -271,21 +276,21 @@ def _check_feature_fk_and_uniqueness(
 
 # ── Forwarded output ───────────────────────────────────────────────────────────
 
-def _check_existing_plots(plot_id_map: dict, context: CheckContext) -> list[dict]:
+def _check_existing_plots(gdf_plots: gpd.GeoDataFrame, context: CheckContext) -> tuple[list[dict], list[dict]]:
     """
-    Error when a (campaign_name, plot_name) from the bundle already exists in
-    the production plot table. Plots cannot be re-ingested — each plot must be
-    unique in production.
+    Reuse-if-identical for plots already in production: same site_id and
+    plot_method → reused, different → error. Forwards the per-feature
+    "already in production" mask as context.output["existing"]["plot"].
     """
-    errors = []
-    for (campaign_name, plot_name) in plot_id_map:
-        if (campaign_name, plot_name) in context.db["plot_set"]:
-            errors.append(_e(
-                None,
-                f"(campaign_name='{campaign_name}', plot_name='{plot_name}') "
-                f"already exists in database",
-            ))
-    return errors
+    props = pd.DataFrame(gdf_plots.drop(columns=gdf_plots.geometry.name)).reset_index(drop=True)
+    props.index = props.index - 1  # so the helper's idx + 2 is the 1-based feature number
+    errors, warnings, existing = check_existing_identical(
+        props, PLOT_KEY, {"site_id": "str", "plot_method": "str"},
+        context.db["plot_rows"], "plots", "plot",
+    )
+    existing.index = gdf_plots.index
+    context.output.setdefault("existing", {})["plot"] = existing
+    return errors, warnings
 
 
 def _forward_plot_maps(

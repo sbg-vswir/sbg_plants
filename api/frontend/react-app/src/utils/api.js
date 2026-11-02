@@ -2,6 +2,7 @@
 import client from './client';
 import { parseParquetData } from './parquetUtils';
 import { SELECT_CONFIGS } from '../viewConfig';
+import { parseSensorKey } from './helpers';
 
 /**
  * POST /query — 3-stage linked plot/trait/granule query.
@@ -85,10 +86,37 @@ export async function fetchParquet(view, filters, limit = null, offset = 0, sche
 }
 
 /**
+ * Wavelength/fwhm of one sensor calibration, from extracted_metadata_view.
+ * Throws unless exactly one row matches — taking the first of several would
+ * silently label the bands with another calibration's wavelengths.
+ */
+async function fetchSensorMetadata(sensorKey, schema) {
+  const { campaign, sensor, sensorDate } = parseSensorKey(sensorKey);
+  const filters = { campaign_name: campaign, sensor_name: sensor };
+  if (sensorDate) filters.sensor_date = sensorDate;
+  const metaRequest = {
+    view: 'extracted_metadata_view',
+    format: 'json',
+    select: ['wavelength_center', 'fwhm'],
+    filters,
+  };
+  if (schema !== 'production') metaRequest.schema = schema;
+  const metaResponse = await client.post('/query/metadata', metaRequest);
+  const metaRows = metaResponse.data ?? [];
+  if (metaRows.length !== 1) {
+    throw new Error(
+      `Expected 1 wavelength set for ${sensorKey}, found ${metaRows.length}` +
+      (sensorDate ? '' : ' — the sensor has several calibrations; a sensor_date is needed')
+    );
+  }
+  return { campaign, sensor, sensorDate, ...metaRows[0] };
+}
+
+/**
  * Start spectra extraction job.
  * spectraType: 'radiance' | 'reflectance'
  *
- * pixelRangesBySensor: { "campaign|sensor": pixelRanges }
+ * pixelRangesBySensor: { "campaign|sensor|sensor_date": pixelRanges } (see sensorKey())
  *   where pixelRanges is a list of [start, end] numeric ranges or a flat array of pixel_ids
  */
 export async function extractSpectra(pixelRangesBySensor, spectraType = 'radiance', schema = 'production') {
@@ -96,19 +124,8 @@ export async function extractSpectra(pixelRangesBySensor, spectraType = 'radianc
 
   const jobEntries = await Promise.all(
     Object.entries(pixelRangesBySensor).map(async ([sensorKey, pixelRanges]) => {
-      const [campaign, sensor] = sensorKey.split('|');
-
-      // Fetch wavelength/fwhm metadata as JSON (backend returns JSON for this view)
-      const metaRequest = {
-        view: 'extracted_metadata_view',
-        format: 'json',
-        select: ['wavelength_center', 'fwhm'],
-        filters: { campaign_name: campaign, sensor_name: sensor },
-      };
-      if (schema !== 'production') metaRequest.schema = schema;
-      const metaResponse = await client.post('/query/metadata', metaRequest);
-      const metaRows = metaResponse.data;
-      const { wavelength_center, fwhm } = metaRows[0];
+      const { campaign, sensor, sensorDate, wavelength_center, fwhm } =
+        await fetchSensorMetadata(sensorKey, schema);
 
       const payload = {
         view,
@@ -117,6 +134,7 @@ export async function extractSpectra(pixelRangesBySensor, spectraType = 'radianc
         metadata: {
           campaign_name: campaign,
           sensor_name: sensor,
+          sensor_date: sensorDate,
           wavelength_center,
           fwhm,
           spectral_column: spectraType === 'reflectance' ? 'reflectance' : 'radiance',
@@ -133,8 +151,8 @@ export async function extractSpectra(pixelRangesBySensor, spectraType = 'radianc
 }
 
 /**
- * Fetch pixel IDs for a completed algorithm job, grouped by campaign|sensor.
- * Returns: { "campaign|sensor": [pixel_id, ...], ... }
+ * Fetch pixel IDs for a completed algorithm job, grouped by campaign|sensor|sensor_date.
+ * Returns: { "campaign|sensor|sensor_date": [pixel_id, ...], ... }
  */
 export async function fetchJobPixelIds(parentJobId) {
   const response = await client.get(`/job_status/${parentJobId}`, {
@@ -146,26 +164,17 @@ export async function fetchJobPixelIds(parentJobId) {
 /**
  * Submit a download job for a completed algorithm job.
  * Fetches pixel IDs from DynamoDB, then submits one async worker job per
- * campaign|sensor key via the existing SQS worker path.
+ * campaign|sensor|sensor_date key via the existing SQS worker path.
  *
- * Returns: { "campaign|sensor": job_id, ... } — same shape as extractSpectra
+ * Returns: { "campaign|sensor|sensor_date": job_id, ... } — same shape as extractSpectra
  */
 export async function downloadAlgorithmJobData(parentJobId, algorithm, schema = 'production') {
   const pixelsBySensor = await fetchJobPixelIds(parentJobId);
   const jobEntries = await Promise.all(
     Object.entries(pixelsBySensor).map(async ([sensorKey, pixelIds]) => {
-      const [campaign, sensor] = sensorKey.split('|');
-
-      const metaRequest = {
-        view: 'extracted_metadata_view',
-        format: 'json',
-        select: ['wavelength_center', 'fwhm'],
-        filters: { campaign_name: campaign, sensor_name: sensor },
-      };
-      // this might need to change
-      if (schema !== 'production') metaRequest.schema = 'production';
-      const metaResponse = await client.post('/query/metadata', metaRequest);
-      const { wavelength_center, fwhm } = metaResponse.data[0];
+      // algorithm jobs always run on production pixels
+      const { campaign, sensor, sensorDate, wavelength_center, fwhm } =
+        await fetchSensorMetadata(sensorKey, 'production');
 
       const payload = {
         view:    algorithm.downloadView,
@@ -174,6 +183,7 @@ export async function downloadAlgorithmJobData(parentJobId, algorithm, schema = 
         metadata: {
           campaign_name:   campaign,
           sensor_name:     sensor,
+          sensor_date:     sensorDate,
           wavelength_center,
           fwhm,
           spectral_column: algorithm.downloadSpectralColumn ?? 'reflectance',
@@ -307,11 +317,14 @@ export const ingestApi = {
     // 1. Request presigned PUT URLs + a batch_id from the Lambda
     const { batch_id, upload_urls } = await client.post('/ingest/upload-urls').then(r => r.data);
 
-    // 2. Upload each file directly to S3 (bypasses API Gateway size limit)
+    // 2. Upload each provided file directly to S3 (bypasses API Gateway size
+    //    limit). Every slot is optional — slots without a file are skipped.
+    const provided = Object.keys(upload_urls).filter(slot => files[slot]);
+    if (!provided.length) throw new Error('Select at least one file');
     await Promise.all(
-      Object.entries(upload_urls).map(([slot, url]) => {
+      provided.map(slot => {
+        const url  = upload_urls[slot];
         const file = files[slot];
-        if (!file) throw new Error(`Missing file for slot: ${slot}`);
         return fetch(url, {
           method: 'PUT',
           body: file,
@@ -323,7 +336,7 @@ export const ingestApi = {
     );
 
     // 3. Notify the Lambda that files are ready — creates DynamoDB record + invokes QAQC
-    return client.post('/ingest', { batch_id, name }).then(r => r.data);
+    return client.post('/ingest', { batch_id, name, files: provided }).then(r => r.data);
   },
 
   // List all batches for the current user

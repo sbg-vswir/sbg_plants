@@ -3,11 +3,13 @@ QAQC cross-file checks.
 
 Runs last in the pipeline after all per-file checks have completed.
 Operates on context.data DataFrames already in memory — no DB queries.
-All checks emit warnings only; none block ingestion.
+All checks emit warnings only; none block ingestion. Checks that compare two
+files are skipped when either file isn't in the bundle (partial bundles).
 
 Checks (in order):
   1. Plots with no traits      — GeoDataFrame rows with no matching rows in traits.csv.
-  2. Traits with no granule    — traits.csv (campaign, plot) pairs not present in plots gdf.
+  2. Traits with no granule    — traits.csv (campaign, plot) pairs not present in plots gdf
+                                 or in production.
   3. Trait count distribution  — samples with fewer non-blank traits than the bundle mode.
   4. Samples with no traits    — samples where every trait value is blank/null.
 """
@@ -21,13 +23,19 @@ from app.checks.types import CheckContext, CheckResult
 
 
 def check(context: CheckContext) -> CheckResult:
-    gdf_plots = context.data["plots"]
-    df_traits = context.data["traits"]
+    gdf_plots = context.data.get("plots")
+    df_traits = context.data.get("traits")
+    if df_traits is None or "trait" not in df_traits.columns:
+        return CheckResult("cross_file", 0, [], [])
 
-    warnings = (
-        _check_plots_with_no_traits(gdf_plots, df_traits)
-        + _check_traits_with_no_granule_coverage(gdf_plots, df_traits)
-        + _check_sample_trait_count_distribution(df_traits)
+    warnings = []
+    if gdf_plots is not None:
+        warnings += (
+            _check_plots_with_no_traits(gdf_plots, df_traits)
+            + _check_traits_with_no_granule_coverage(gdf_plots, df_traits, context.db["plot_set"])
+        )
+    warnings += (
+        _check_sample_trait_count_distribution(df_traits)
         + _check_samples_with_no_traits(df_traits)
     )
 
@@ -79,10 +87,11 @@ def _check_plots_with_no_traits(gdf_plots: gpd.GeoDataFrame, df_traits: pd.DataF
 def _check_traits_with_no_granule_coverage(
     gdf_plots: gpd.GeoDataFrame,
     df_traits: pd.DataFrame,
+    db_plot_set: set,
 ) -> list[dict]:
     """
     Warn for each unique (campaign_name, plot_name) in traits.csv that has
-    no matching row in the plots GeoDataFrame.
+    no matching row in the plots GeoDataFrame and isn't already in production.
     One warning per pair, not per trait row.
     """
     if gdf_plots.empty or df_traits.empty:
@@ -90,7 +99,7 @@ def _check_traits_with_no_granule_coverage(
 
     geojson_pairs = set(
         zip(gdf_plots["campaign_name"], gdf_plots["plot_name"])
-    )
+    ) | db_plot_set
     geojson_pairs.discard((None, None))
 
     warnings = []

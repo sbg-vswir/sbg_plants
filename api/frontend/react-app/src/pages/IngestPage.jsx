@@ -156,9 +156,9 @@ export default function IngestPage() {
     }
   }
 
-  const allFilesSelected = fileSlots.every(s => files[s.key]);
-  const fileSlotKeys     = fileSlots.map(s => s.key);
-  const canSubmit         = allFilesSelected && batchName.trim().length > 0;
+  const anyFileSelected = fileSlots.some(s => files[s.key]);
+  const fileSlotKeys    = fileSlots.map(s => s.key);
+  const canSubmit       = anyFileSelected && batchName.trim().length > 0;
 
   const theme    = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -177,7 +177,9 @@ export default function IngestPage() {
         >
           <Typography variant="h6" sx={{ mb: 0.5 }}>Submit Ingestion Bundle</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            All 6 files are required. Files are validated asynchronously — you can track progress in the batch list.
+            Include only what's new — at least one file. Anything a file references (campaign, sensor
+            calibration, granule, plot) must be in this bundle or already in the database. Files are
+            validated asynchronously — you can track progress in the batch list.
           </Typography>
 
           {submitError   && <Alert severity="error"   sx={{ mb: 2 }}>{submitError}</Alert>}
@@ -205,7 +207,7 @@ export default function IngestPage() {
             {fileSlots.map(slot => (
               <Box key={slot.key}>
                 <Typography variant="body2" fontWeight={500} sx={{ mb: 0.5 }}>
-                  {slot.label} <Typography component="span" color="error">*</Typography>
+                  {slot.label}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
                   {slot.hint}

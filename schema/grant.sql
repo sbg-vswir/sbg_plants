@@ -59,6 +59,12 @@ GRANT SELECT, INSERT, UPDATE, DELETE
 -- Staging: sequences needed for SERIAL columns
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA vswir_plants_staging TO ingestion_staging;
 
+-- Production sequences: staged plot / plot_shape / pixel rows take their ids
+-- from these so the ids carry over unchanged on promotion
+GRANT USAGE ON SEQUENCE vswir_plants.plot_plot_id_seq             TO ingestion_staging;
+GRANT USAGE ON SEQUENCE vswir_plants.plot_shape_plot_shape_id_seq TO ingestion_staging;
+GRANT USAGE ON SEQUENCE vswir_plants.pixel_pixel_id_seq           TO ingestion_staging;
+
 -- Production: read-only for QAQC cross-referencing
 GRANT SELECT ON vswir_plants.campaign               TO ingestion_staging;
 GRANT SELECT ON vswir_plants.sensor_campaign        TO ingestion_staging;

@@ -16,11 +16,16 @@ Checks (in order):
   4. Scope rules per role — mirrors doi_scope_chk in schema/plants_v5_tables.sql.
   5. Duplicates — (campaign_name, lower(doi), role, scopes) must be unique,
                   mirroring the doi_unique index.
-  6. Campaign in bundle — campaign_name must be in this bundle's campaign_metadata.
+  6. Campaign exists — campaign_name must be in this bundle's campaign_metadata
+                       or already in production.
   7. Scopes exist — each sensor / plot_method / trait (+method) / site must
-                    appear in this bundle's data, otherwise the DOI never shows.
-  8. Site coverage (warning) — when a campaign's plot DOIs use site_ids, every
-                               plot site should be covered by one of them.
+                    appear in this bundle or in production, otherwise the DOI
+                    never shows.
+  8. Existing DOI rows — a row already in production (doi_unique key) follows
+                         the reuse-if-identical rule on citation_text.
+  9. Site coverage (warning) — when a campaign's plot DOIs use site_ids, every
+                               plot site in this bundle should be covered by
+                               one of them.
 """
 
 from __future__ import annotations
@@ -30,7 +35,10 @@ import re
 import pandas as pd
 
 from app.checks.types import CheckContext, CheckResult
-from app.checks.universal import load_config, run_mechanical_checks, check_foreign_key
+from app.checks.universal import (
+    load_config, run_mechanical_checks, check_foreign_key, check_existing_identical,
+)
+from app.db_refs import DOI_KEY, DOI_REQUIRED
 
 CONFIG = load_config("doi")
 CONFIG["_file_name"] = "doi"
@@ -65,8 +73,15 @@ def check(context: CheckContext) -> CheckResult:
     errors += _check_format(df)
     errors += _check_scope_rules(df)
     errors += _check_duplicates(df)
-    errors += _check_campaign_in_bundle(df, context)
+    errors += _check_campaign_exists(df, context)
     errors += _check_scopes_exist(df, context)
+    existing_errors, existing_warnings, existing = check_existing_identical(
+        df, DOI_KEY, {"citation_text": "str"}, context.db["doi_rows"], "doi", "doi row",
+        required=DOI_REQUIRED,
+    )
+    errors   += existing_errors
+    warnings += existing_warnings
+    context.output.setdefault("existing", {})["doi"] = existing
     warnings += _check_site_coverage(df, context)
     return CheckResult("doi", len(df), errors, warnings)
 
@@ -82,8 +97,10 @@ def _split_sites(val) -> list[str]:
 
 
 def _plot_props(context: CheckContext) -> pd.DataFrame:
-    """Plot feature properties from plots.geojson (no geometry)."""
-    gdf = context.data["plots"]
+    """Plot feature properties from plots.geojson (no geometry); empty if not provided."""
+    gdf = context.data.get("plots")
+    if gdf is None or gdf.empty:
+        return pd.DataFrame(columns=["campaign_name", "site_id", "plot_method"])
     return pd.DataFrame(gdf.drop(columns=gdf.geometry.name))
 
 
@@ -153,26 +170,42 @@ def _check_duplicates(df: pd.DataFrame) -> list[dict]:
     return errors
 
 
-def _check_campaign_in_bundle(df: pd.DataFrame, context: CheckContext) -> list[dict]:
-    """campaign_name must be one of the campaigns in this bundle's campaign_metadata."""
-    bundle_campaigns = set(context.data["campaign_metadata"].get("campaign_name", []))
-    return check_foreign_key(df, ["campaign_name"], bundle_campaigns, "doi", "campaign_name")
+def _check_campaign_exists(df: pd.DataFrame, context: CheckContext) -> list[dict]:
+    """campaign_name must be in this bundle's campaign_metadata or already in production."""
+    df_campaign = context.data.get("campaign_metadata")
+    bundle_campaigns = set(df_campaign.get("campaign_name", [])) if df_campaign is not None else set()
+    return check_foreign_key(
+        df, ["campaign_name"], bundle_campaigns | context.db["campaign_names"], "doi", "campaign_name",
+    )
 
 
 def _check_scopes_exist(df: pd.DataFrame, context: CheckContext) -> list[dict]:
-    """A scope that matches nothing in the bundle would never be cited."""
+    """A scope that matches nothing in the bundle or production would never be cited."""
     plots  = _plot_props(context)
-    traits = context.data["traits"]
+    traits = context.data.get("traits")
+    if traits is None:
+        traits = pd.DataFrame(columns=["campaign_name", "trait", "method"])
     if "trait" in traits.columns:
         traits = traits[traits["trait"].astype(str).str.strip() != ""]  # skip sample-only rows
 
-    sensor_set      = context.output.get("campaign_sensor_set", set())
-    plot_method_set = set(zip(plots.get("campaign_name", []), plots.get("plot_method", [])))
-    site_set        = set(zip(plots.get("campaign_name", []), plots.get("site_id", [])))
-    trait_set       = set(zip(traits.get("campaign_name", []), traits.get("trait", [])))
+    # sensor scopes cover every sensor_date of the sensor, so compare on (campaign, sensor)
+    sensor_set = {
+        k[:2] for k in context.output.get("campaign_sensor_set", set()) | context.db["campaign_sensor_set"]
+    }
+    db_plots = context.db["plot_rows"]
+    db_trait_keys = context.db["leaf_trait_rows"].keys()  # (campaign, plot, date, sample, trait, method, …)
+    plot_method_set = set(zip(plots.get("campaign_name", []), plots.get("plot_method", []))) | {
+        (k[0], v["plot_method"]) for k, v in db_plots.items()
+    }
+    site_set = set(zip(plots.get("campaign_name", []), plots.get("site_id", []))) | {
+        (k[0], v["site_id"]) for k, v in db_plots.items()
+    }
+    trait_set = set(zip(traits.get("campaign_name", []), traits.get("trait", []))) | {
+        (k[0], k[4]) for k in db_trait_keys
+    }
     trait_method_set = set(zip(
         traits.get("campaign_name", []), traits.get("trait", []), traits.get("method", []),
-    ))
+    )) | {(k[0], k[4], k[5]) for k in db_trait_keys}
 
     errors = []
 
@@ -182,17 +215,17 @@ def _check_scopes_exist(df: pd.DataFrame, context: CheckContext) -> list[dict]:
     for idx, row in df.iterrows():
         camp = row["campaign_name"]
         if _is_set(row["sensor_name"]) and (camp, row["sensor_name"]) not in sensor_set:
-            err(idx, "sensor_name", f"sensor '{row['sensor_name']}' is not in campaign_metadata.csv for campaign '{camp}'")
+            err(idx, "sensor_name", f"sensor '{row['sensor_name']}' is not in campaign_metadata.csv or the database for campaign '{camp}'")
         if _is_set(row["plot_method"]) and (camp, row["plot_method"]) not in plot_method_set:
-            err(idx, "plot_method", f"no plots in plots.geojson use plot_method '{row['plot_method']}' for campaign '{camp}'")
+            err(idx, "plot_method", f"no plots in plots.geojson or the database use plot_method '{row['plot_method']}' for campaign '{camp}'")
         if _is_set(row["trait"]):
             if (camp, row["trait"]) not in trait_set:
-                err(idx, "trait", f"trait '{row['trait']}' is not in traits.csv for campaign '{camp}'")
+                err(idx, "trait", f"trait '{row['trait']}' is not in traits.csv or the database for campaign '{camp}'")
             elif _is_set(row["trait_method"]) and (camp, row["trait"], row["trait_method"]) not in trait_method_set:
-                err(idx, "trait_method", f"trait '{row['trait']}' measured with method '{row['trait_method']}' is not in traits.csv for campaign '{camp}'")
+                err(idx, "trait_method", f"trait '{row['trait']}' measured with method '{row['trait_method']}' is not in traits.csv or the database for campaign '{camp}'")
         for site in _split_sites(row["site_ids"]):
             if (camp, site) not in site_set:
-                err(idx, "site_ids", f"site '{site}' is not in plots.geojson for campaign '{camp}'")
+                err(idx, "site_ids", f"site '{site}' is not in plots.geojson or the database for campaign '{camp}'")
     return errors
 
 

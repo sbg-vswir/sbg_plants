@@ -24,7 +24,7 @@ def list_jobs(event: dict) -> dict:
 
 
 def job_pixels(event: dict, parent_job_id: str) -> dict:
-    """GET /job_status/{id}?mode=pixels — return pixel IDs grouped by campaign|sensor."""
+    """GET /job_status/{id}?mode=pixels — return pixel IDs grouped by campaign|sensor|sensor_date."""
     try:
         claims = get_claims(event)
         require_admin(claims)

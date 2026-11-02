@@ -23,7 +23,7 @@ CORS_HEADERS = {
 STAGING_TABLES = [
     "extracted_spectra", "pixel", "leaf_traits", "sample",
     "insitu_plot_event", "plot_raster_intersect", "plot",
-    "plot_shape", "granule", "sensor_campaign", "campaign",
+    "plot_shape", "granule", "sensor_campaign", "doi", "campaign",
 ]
 
 

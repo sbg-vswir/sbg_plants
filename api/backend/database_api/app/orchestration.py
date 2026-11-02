@@ -82,6 +82,7 @@ def _granule_cte_and_where(granule_filters: dict, plot_ids: list, schema: str):
                 granule_id,
                 campaign_name,
                 sensor_name,
+                sensor_date,
                 acquisition_date,
                 acquisition_start_time,
                 cloudy_conditions,
@@ -319,6 +320,7 @@ def _fetch_granules(plot_ids_page, granule_filters, schema: str):
             fg.granule_id,
             fg.campaign_name,
             fg.sensor_name,
+            fg.sensor_date,
             fg.acquisition_date,
             fg.acquisition_start_time,
             fg.cloudy_conditions,
@@ -331,7 +333,7 @@ def _fetch_granules(plot_ids_page, granule_filters, schema: str):
         JOIN plot_pixel_maps ppm ON ppm.granule_id = fg.granule_id
         WHERE {pixel_fragment}
         GROUP BY
-            fg.granule_id, fg.campaign_name, fg.sensor_name,
+            fg.granule_id, fg.campaign_name, fg.sensor_name, fg.sensor_date,
             fg.acquisition_date, fg.acquisition_start_time,
             fg.cloudy_conditions, fg.cloud_type,
             ppm.plot_pixel_map
@@ -383,6 +385,15 @@ def _fetch_citations(plot_ids, trait_filters, granule_filters, schema: str):
     trait_where, trait_params = _trait_where(trait_filters, plot_ids)
     trait_fragment = trait_where.lstrip().removeprefix("WHERE").strip()
 
+    # Staged data can belong to a campaign that is already in production, and
+    # a DOI already in production isn't staged again — look in both.
+    doi_source = f'"{schema}".doi'
+    if schema != "vswir_plants":
+        doi_cols = ("campaign_name::text AS campaign_name, doi, citation_text, role, "
+                    "sensor_name, plot_method, trait, trait_method, site_ids")
+        doi_source = (f'(SELECT {doi_cols} FROM "{schema}".doi '
+                      f'UNION ALL SELECT {doi_cols} FROM vswir_plants.doi)')
+
     sql = f"""
         {cte_sql},
         sensors_used AS (
@@ -405,7 +416,7 @@ def _fetch_citations(plot_ids, trait_filters, granule_filters, schema: str):
         SELECT DISTINCT d.campaign_name::text, d.doi, d.citation_text, d.role::text,
                d.sensor_name::text, d.plot_method::text, d.trait::text, d.trait_method::text,
                d.site_ids
-        FROM "{schema}".doi d
+        FROM {doi_source} d
         WHERE d.campaign_name::text IN (SELECT campaign_name::text FROM plots_used)
           AND CASE
             WHEN d.role IN ('radiance_dataset', 'pixel_shade_mask') THEN EXISTS (

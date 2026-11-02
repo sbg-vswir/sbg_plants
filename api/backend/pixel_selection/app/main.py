@@ -75,8 +75,10 @@ def get_connection():
 def fetch_pixel_metadata(pixel_ranges: dict) -> dict:
     """
     Query pixels using BETWEEN clauses — one per [start, end] range pair.
-    pixel_ranges: { "campaign|sensor": [[start, end], ...], ... }
-    Returns: { (campaign_name, sensor_name, granule_id): [pixel_id, ...] }
+    pixel_ranges: { "campaign|sensor|sensor_date": [[start, end], ...], ... }
+    Returns: { (campaign_name, sensor_name, sensor_date, granule_id): [pixel_id, ...] }
+    sensor_date (ISO string) identifies the sensor calibration — its
+    wavelengths/fwhm differ from other calibrations of the same sensor.
     """
     # Collect all ranges across all sensor keys
     all_ranges = [r for ranges in pixel_ranges.values() for r in ranges]
@@ -89,7 +91,7 @@ def fetch_pixel_metadata(pixel_ranges: dict) -> dict:
     params = [val for r in all_ranges for val in r]
 
     sql = f"""
-        SELECT pixel_id, campaign_name, sensor_name, granule_id
+        SELECT pixel_id, campaign_name, sensor_name, sensor_date::text AS sensor_date, granule_id
         FROM vswir_plants.extracted_spectra_view
         WHERE {where_parts}
     """
@@ -101,7 +103,7 @@ def fetch_pixel_metadata(pixel_ranges: dict) -> dict:
 
     grouped = defaultdict(list)
     for row in rows:
-        key = (row["campaign_name"], row["sensor_name"], row["granule_id"])
+        key = (row["campaign_name"], row["sensor_name"], row["sensor_date"], row["granule_id"])
         grouped[key].append(row["pixel_id"])
 
     return dict(grouped)
@@ -113,6 +115,7 @@ def submit_job(
     batch_index: int,
     campaign_name: str,
     sensor_name: str,
+    sensor_date: str,
     granule_id: str,
     algo_config: dict,
 ) -> str:
@@ -129,6 +132,7 @@ def submit_job(
             "batch_index":   {"N": str(batch_index)},
             "campaign_name": {"S": campaign_name},
             "sensor_name":   {"S": sensor_name},
+            "sensor_date":   {"S": sensor_date},
             "granule_id":    {"S": granule_id},
             "created_at":    {"S": datetime.now(timezone.utc).isoformat()},
         }
@@ -143,6 +147,7 @@ def submit_job(
                     {"name": "PIXEL_IDS",      "value": ",".join(str(i) for i in pixel_ids)},
                     {"name": "CAMPAIGN_NAME",  "value": campaign_name},
                     {"name": "SENSOR_NAME",    "value": sensor_name},
+                    {"name": "SENSOR_DATE",    "value": sensor_date},
                     {"name": "JOB_ID",         "value": job_id},
                 ]
             }
@@ -166,7 +171,7 @@ def submit_job(
         raise
     logger.info(
         f"submitted job {job_id} (batch {batch_index}) for {len(pixel_ids)} pixels "
-        f"[{campaign_name}|{sensor_name}|{granule_id}]"
+        f"[{campaign_name}|{sensor_name}|{sensor_date}|{granule_id}]"
     )
     return job_id
 
@@ -197,24 +202,26 @@ def lambda_handler(event, context):
 
     pixel_ranges = body.get("pixel_ranges")
     if not pixel_ranges or not isinstance(pixel_ranges, dict):
-        return {"statusCode": 400, "body": json.dumps({"error": "missing or invalid pixel_ranges — expected { 'campaign|sensor': [[start, end], ...] }"})}
+        return {"statusCode": 400, "body": json.dumps({"error": "missing or invalid pixel_ranges — expected { 'campaign|sensor|sensor_date': [[start, end], ...] }"})}
 
     logger.info(
         f"request from {submitted_by} — {len(pixel_ranges)} sensor key(s), "
         f"{sum(len(v) for v in pixel_ranges.values())} range(s)"
     )
 
-    # Validate format — each key must be "campaign|sensor", each value a list of [start, end] pairs
+    # Validate format — each key must be "campaign|sensor|sensor_date" (the key
+    # only labels the ranges; grouping comes from the DB), each value a list of
+    # [start, end] pairs
     for sensor_key, ranges in pixel_ranges.items():
         if "|" not in sensor_key:
-            return {"statusCode": 400, "body": json.dumps({"error": f"invalid key '{sensor_key}', expected 'campaign|sensor' format"})}
+            return {"statusCode": 400, "body": json.dumps({"error": f"invalid key '{sensor_key}', expected 'campaign|sensor|sensor_date' format"})}
         if not isinstance(ranges, list):
             return {"statusCode": 400, "body": json.dumps({"error": f"ranges for '{sensor_key}' must be a list"})}
         for entry in ranges:
             if not (isinstance(entry, list) and len(entry) == 2 and all(isinstance(v, int) for v in entry)):
                 return {"statusCode": 400, "body": json.dumps({"error": f"each range for '{sensor_key}' must be a [start, end] integer pair"})}
 
-    # Query DB — group by (campaign, sensor, granule) using BETWEEN clauses
+    # Query DB — group by (campaign, sensor, sensor_date, granule) using BETWEEN clauses
     try:
         grouped = fetch_pixel_metadata(pixel_ranges)
     except Exception as e:
@@ -246,9 +253,9 @@ def lambda_handler(event, context):
         }
     )
 
-    # One job per (campaign, sensor, granule) group, capped at BATCH_SIZE pixels
+    # One job per (campaign, sensor, sensor_date, granule) group, capped at BATCH_SIZE pixels
     batch_index = 0
-    for (campaign_name, sensor_name, granule_id), ids in grouped.items():
+    for (campaign_name, sensor_name, sensor_date, granule_id), ids in grouped.items():
         for chunk_ids in chunk(ids, BATCH_SIZE):
             job_id = submit_job(
                 parent_job_id=parent_job_id,
@@ -256,6 +263,7 @@ def lambda_handler(event, context):
                 batch_index=batch_index,
                 campaign_name=campaign_name,
                 sensor_name=sensor_name,
+                sensor_date=sensor_date,
                 granule_id=granule_id,
                 algo_config=algo_config,
             )

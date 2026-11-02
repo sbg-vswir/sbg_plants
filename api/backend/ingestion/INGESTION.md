@@ -2,10 +2,29 @@
 
 ## Overview
 
-Data is submitted as a bundle of 7 files. Files are validated asynchronously against the
+Data is submitted as a bundle of up to 7 files. Files are validated asynchronously against the
 production database, loaded into a staging schema on success, and promoted to production
 after admin review and approval. If validation fails, individual files can be replaced and
 re-checked without starting over.
+
+**Every file is optional — include only what's new** (at least one file). Anything a file
+references (campaign, sensor calibration, granule, plot, plot event, sample) must be in this
+bundle **or already in production**; otherwise QAQC fails. So year 2 of a campaign can be a
+bundle with just the new granules, plots and spectra, a traits-only bundle can add samples to
+existing plots, and a `doi.csv`-only bundle can add DOIs to an existing campaign.
+
+**Rows that already exist in production** (same natural key) are handled by the
+*reuse-if-identical* rule:
+
+| situation | result |
+|---|---|
+| key not in production | new row, staged and promoted |
+| key in production, every column identical | warning "already in production — reused", not staged or inserted again |
+| key in production, any column differs | error naming the differing columns |
+
+This applies to campaign, sensor calibration (`sensor_campaign`), plot, plot event, sample,
+leaf trait and DOI rows. Granules, plot-granule intersections and pixels must always be new —
+resubmitting one is an error.
 
 | File | Tables |
 |------|--------|
@@ -23,9 +42,11 @@ re-checked without starting over.
 
 ### `campaign_metadata.csv`
 
-One row per campaign + sensor combination. Campaign-level fields (`primary_funding_source`,
-`data_repository`, `taxa_system`) repeat across rows when a campaign has multiple sensors.
-DOIs are submitted separately in [`doi.csv`](#doicsv).
+One row per sensor calibration: campaign + sensor + `sensor_date`. The same campaign can fly the
+same sensor with different calibrations — each gets its own `sensor_date` (the date the
+calibration took effect) and its own bands in `wavelengths.csv`. Campaign-level fields
+(`primary_funding_source`, `data_repository`, `taxa_system`) repeat across rows and must be
+identical on every row of a campaign. DOIs are submitted separately in [`doi.csv`](#doicsv).
 
 | Column | Table | Nullable | Enum |
 |--------|-------|----------|------|
@@ -34,45 +55,50 @@ DOIs are submitted separately in [`doi.csv`](#doicsv).
 | `data_repository` | `campaign` | Yes | `Repository` |
 | `taxa_system` | `campaign` | Yes | |
 | `sensor_name` | `sensor_campaign` | No | `Sensor_name` |
+| `sensor_date` | `sensor_campaign` | No | |
 | `elevation_source` | `sensor_campaign` | No | `ELEVATION_source` |
 
-**Primary key:** `(campaign_name, sensor_name)`
+**Primary key:** `(campaign_name, sensor_name, sensor_date)`
 
 ---
 
 ### `wavelengths.csv`
 
-One row per band per campaign + sensor. Bands must be in ascending order — the pipeline
+One row per band per sensor calibration. Bands must be in ascending order — the pipeline
 assembles them positionally into `wavelength_center[]` and `fwhm[]` on `sensor_campaign`.
 
-`(campaign_name, sensor_name)` must exist in `campaign_metadata.csv` in this bundle or in
-`sensor_campaign` in the database.
+`(campaign_name, sensor_name, sensor_date)` must exist in `campaign_metadata.csv` in this bundle
+or in `sensor_campaign` in the database. A calibration that is new (not yet in production) must
+have its bands here; bands for a calibration already in production must match it exactly.
 
 | Column | Table | Nullable |
 |--------|-------|----------|
 | `campaign_name` | `sensor_campaign` | No |
 | `sensor_name` | `sensor_campaign` | No |
+| `sensor_date` | `sensor_campaign` | No |
 | `band` | `sensor_campaign` | No |
 | `wavelength` | `sensor_campaign.wavelength_center` | No |
 | `fwhm` | `sensor_campaign.fwhm` | No |
 
-`band` is a 0-based integer. All bands for a given `(campaign_name, sensor_name)` must be
-contiguous (`0, 1, 2, ..., N`) with no gaps or duplicates.
+`band` is a 0-based integer. All bands for a given `(campaign_name, sensor_name, sensor_date)`
+must be contiguous (`0, 1, 2, ..., N`) with no gaps or duplicates.
 
-**Primary key:** `(campaign_name, sensor_name, band)`
+**Primary key:** `(campaign_name, sensor_name, sensor_date, band)`
 
 ---
 
 ### `granule_metadata.csv`
 
-One row per granule. `(campaign_name, sensor_name)` must exist in `sensor_campaign` (from
-this bundle or the database).
+One row per granule. `sensor_date` says which sensor calibration the granule was processed
+with; `(campaign_name, sensor_name, sensor_date)` must exist in `sensor_campaign` (from this
+bundle or the database).
 
 | Column | Nullable | Enum |
 |--------|----------|------|
 | `granule_id` | No | |
 | `campaign_name` | No | |
 | `sensor_name` | No | `Sensor_name` |
+| `sensor_date` | No | |
 | `acquisition_date` | No | |
 | `acquisition_start_time` | No | |
 | `cloudy_conditions` | No | `CLOUD_conditions` |
@@ -208,8 +234,9 @@ It must **not** be included in `traits.csv`.
 ### `spectra.csv`
 
 One row per pixel. Band columns are positional integers using 0-based indexing (`0, 1, 2, ...`).
-The number of band columns must match `wavelength_center` length in `sensor_campaign` for the
-given `(campaign_name, sensor_name)`.
+The number of band columns must match `wavelength_center` length of the pixel's **granule's**
+sensor calibration `(campaign_name, sensor_name, sensor_date)`. The row's `campaign_name` /
+`sensor_name` must match its granule's.
 
 `(plot_name, campaign_name)` resolves `plot_id`. The `(plot_id, granule_id)` combination must
 exist in `plot_raster_intersect` (from this bundle or the database).
@@ -224,7 +251,7 @@ exist in `plot_raster_intersect` (from this bundle or the database).
 |--------|-------|----------|
 | `plot_name` | *(resolve plot_id)* | No |
 | `campaign_name` | *(resolve plot_id)* | No |
-| `sensor_name` | *(band count check)* | No |
+| `sensor_name` | *(must match the granule)* | No |
 | `granule_id` | `pixel` | No |
 | `glt_row` | `pixel` | No |
 | `glt_column` | `pixel` | No |
@@ -259,11 +286,11 @@ the file with only the header row.
 
 | Column | Nullable | Enum | Notes |
 |--------|----------|------|-------|
-| `campaign_name` | No | `CAMPAIGN_name` | Must be a campaign in this bundle's `campaign_metadata.csv` |
+| `campaign_name` | No | `CAMPAIGN_name` | Must be in this bundle's `campaign_metadata.csv` or already in production |
 | `doi` | No | | Bare DOI, e.g. `10.3334/ORNLDAAC/1234` — no `https://doi.org/` or `doi:` prefix |
 | `citation_text` | Yes | | Full citation, only for a DOI that can't be looked up online |
 | `role` | No | `DOI_role` | See the table below |
-| `sensor_name` | Yes | `Sensor_name` | |
+| `sensor_name` | Yes | `Sensor_name` | Covers every `sensor_date` of that sensor |
 | `plot_method` | Yes | `PLOT_method` | |
 | `trait` | Yes | `Trait` | |
 | `trait_method` | Yes | `Trait_method` | Matches the `method` column in `traits.csv` |
@@ -302,13 +329,13 @@ SHIFT,10.1234/terrestrial-plots,,plot_information,,,,,T01;T02;T03
 
 ## Processing Order
 
-Files are validated and staged in strict dependency order. Steps marked with `*` capture
-database-generated IDs and pass them to the next dependent step.
+Files are validated and staged in strict dependency order. Rows found already in production
+(reused) are skipped at every step.
 
 ```
 1. campaign_metadata.csv
        campaign
-       sensor_campaign  (elevation_source only; wavelength_center/fwhm from step 2)
+       sensor_campaign  (elevation_source; wavelength_center/fwhm from step 2)
 
 2. wavelengths.csv
        sensor_campaign  (populates wavelength_center[] and fwhm[])
@@ -317,20 +344,32 @@ database-generated IDs and pass them to the next dependent step.
        granule
 
 4. plots.geojson  (one feature per plot-granule intersection)
-       plot_shape *           → plot_shape_id per feature
-       plot *                 → plot_id on first insert, reused for same plot
+       plot_shape             → plot_shape_id per feature
+       plot                   → new plots only; existing plots keep their production plot_id
        plot_raster_intersect  ← plot_id + plot_shape_id
 
-       plot_id_map: (campaign_name, plot_name) → plot_id
+       plot lookup: (campaign_name, plot_name) → plot_id, from this batch's new plots
+                    + production plots
                     |                          |
                     v                          v
 5. traits.csv                       6. spectra.csv
-       insitu_plot_event                    pixel *  → pixel_id per row
+       insitu_plot_event                    pixel  → pixel_id per row
        sample                               extracted_spectra  ← pixel_id
        leaf_traits
 ```
 
-`doi.csv` is loaded right after `campaign` (step 1) — it only depends on the campaign row.
+`doi.csv` is loaded right after `campaign` (step 1).
+
+**IDs.** Staged `plot_id`, `plot_shape_id` and `pixel_id` come from the **production**
+sequences, so a staged row already has the id it keeps in production, and a staged child row
+(trait, intersect, pixel) can point at a plot that is new in this batch or already in
+production. Promotion is a straight `INSERT … SELECT` per table — nothing is remapped. A child
+row whose plot can't be resolved stops the staging load with an error (it is never silently
+dropped).
+
+**Two batches staged at the same time** can't see each other in QAQC. If both add the same new
+row (e.g. the same new plot), the second promotion fails with "added to production by another
+batch since this one passed QAQC — recheck the batch"; a recheck then reuses that row.
 
 ---
 
@@ -354,24 +393,28 @@ single report — the pipeline does not stop at the first failing file.
 
 | Check | Detail |
 |-------|--------|
-| `campaign_name` not already in database | Must not already exist in production `campaign` table |
-| `(campaign_name, sensor_name)` not already in database | Must not already exist in production `sensor_campaign` |
+| Campaign columns consistent | Every row of a campaign must carry the same `primary_funding_source`, `data_repository`, `taxa_system` |
+| Existing campaign | Reuse-if-identical against production `campaign` |
+| Existing sensor calibration | Reuse-if-identical on `elevation_source` against production `sensor_campaign` (wavelengths are compared in `wavelengths.csv`) |
+| New calibration has wavelengths | A `(campaign_name, sensor_name, sensor_date)` not in production must have its bands in `wavelengths.csv` |
 
 ### `wavelengths.csv`
 
 | Check | Detail |
 |-------|--------|
-| `(campaign_name, sensor_name)` resolves | Must exist in this bundle or in production `sensor_campaign` |
-| Band indices 0-based contiguous | For each sensor group: sorted bands must equal `[0, 1, ..., N]` with no gaps |
+| `(campaign_name, sensor_name, sensor_date)` resolves | Must exist in this bundle or in production `sensor_campaign` |
+| Band indices 0-based contiguous | For each calibration: sorted bands must equal `[0, 1, ..., N]` with no gaps |
 | Wavelengths monotonically increasing | Wavelength values must be strictly ascending when sorted by band |
 | Wavelength range | All wavelength values must be within 350–2600 nm. Values outside this range almost certainly indicate the wrong unit (µm instead of nm) or corrupted data |
 | FWHM range | All fwhm values must be within 0.1–100 nm. Catches the µm/nm unit mistake (e.g. `0.01` when `10 nm` was intended). FWHM is not checked for monotonicity — it commonly varies non-monotonically across a sensor's spectral range |
+| Matches production | Bands for a calibration already in production must be identical to it — a new calibration needs a new `sensor_date` |
 
 ### `granule_metadata.csv`
 
 | Check | Detail |
 |-------|--------|
-| `(campaign_name, sensor_name)` resolves | Must exist in this bundle or in production `sensor_campaign` |
+| `(campaign_name, sensor_name, sensor_date)` resolves | Must exist in this bundle or in production `sensor_campaign` |
+| `sensor_date` not after `acquisition_date` (warning) | A granule should use a calibration that existed when it was flown |
 | `granule_id` not already in database | Must not already exist in production `granule` |
 
 ### `plots.geojson`
@@ -388,7 +431,7 @@ single report — the pipeline does not stop at the first failing file.
 | `granule_id` resolves | Must exist in this bundle or in production `granule` |
 | `(campaign_name, plot_name, granule_id)` unique within file | No two features in this submission may share the same plot-granule intersection |
 | `(campaign_name, plot_name, granule_id)` unique in database | Must not already exist in production `plot_raster_intersect` |
-| `(campaign_name, plot_name)` not already in database | Must not already exist in production `plot` table |
+| Existing plot | Reuse-if-identical on `site_id`, `plot_method` against production `plot` — a new granule over an existing plot reuses it |
 
 ### `traits.csv`
 
@@ -397,9 +440,10 @@ single report — the pipeline does not stop at the first failing file.
 | `(campaign_name, plot_name)` resolves | Must exist in this bundle or in production `plot` |
 | `error_type` required when `error` is set | If `error` has a value, `error_type` must also be present |
 | Trait fields are all populated or all blank | `trait`, `value`, `method`, `handling`, and `units` must either all be populated or all be blank. This allows samples with no trait measurements. |
-| Plot event does not already exist | `(campaign_name, plot_name, collection_date)` must not already exist in production `insitu_plot_event` |
-| Sample does not already exist | `(campaign_name, plot_name, collection_date, sample_name)` must not already exist in production `sample` |
-| Trait record is not duplicated | `(campaign_name, plot_name, collection_date, sample_name, trait, method, handling, units)` must be unique within `traits.csv` and must not already exist in production `leaf_traits`. `value` is not part of the uniqueness check. |
+| Existing plot event | Reuse-if-identical on `(campaign_name, plot_name, collection_date)` against production `insitu_plot_event` |
+| Existing sample | Reuse-if-identical on `(campaign_name, plot_name, collection_date, sample_name)` against production `sample` |
+| Existing leaf trait | Reuse-if-identical on `(campaign_name, plot_name, collection_date, sample_name, trait, method, handling, units)` (the production `leaf_traits_unique` key), comparing `value`, `error`, `error_type` |
+| Trait record is not duplicated | `(sample_name, plot_name, collection_date, trait, method, handling, units)` must be unique within `traits.csv` |
 
 ### `spectra.csv`
 
@@ -408,7 +452,8 @@ single report — the pipeline does not stop at the first failing file.
 | `(campaign_name, plot_name)` resolves | Must exist in this bundle or in production `plot` |
 | `(campaign_name, plot_name, granule_id)` in `plot_raster_intersect` | The plot-granule intersection must exist in this bundle or in production |
 | Band columns 0-based contiguous | Sorted integer headers must equal `[0, 1, ..., N]` |
-| Band count matches wavelength count | Number of band columns must equal the band count for `(campaign_name, sensor_name)` |
+| Granule sensor matches | The row's `campaign_name` / `sensor_name` must match its granule's |
+| Band count matches wavelength count | Number of band columns must equal the band count of the granule's calibration `(campaign_name, sensor_name, sensor_date)` |
 | No duplicate pixels within file | `(campaign_name, plot_name, granule_id, glt_row, glt_column)` must be unique |
 | No existing pixels in database | Same key must not already exist in production `pixel` |
 | Pixel coordinates within WGS84 bounds | `lon`/`lat` must be within −180..180 and −90..90. Out-of-bounds coordinates are a blocking error |
@@ -421,21 +466,23 @@ single report — the pipeline does not stop at the first failing file.
 | DOI format | `doi` must be a bare DOI matching `10.<4–9 digits>/...` |
 | Scope columns match the role | Required scope columns are set and any scope column the role doesn't allow is blank (see the role table under the file spec) |
 | No duplicate DOI rows | `(campaign_name, doi, role, scopes)` must be unique. DOIs compare case-insensitively and `site_ids` lists compare after sorting |
-| `campaign_name` in bundle | Must be a campaign in this bundle's `campaign_metadata.csv` |
-| Scopes exist | `sensor_name` must be a sensor for that campaign in `campaign_metadata.csv`; `plot_method` and each `site_ids` entry must appear in `plots.geojson`; `trait` (and `trait_method`) must appear in `traits.csv` |
-| Site coverage (warning) | If a campaign's `plot_information` / `plot_shapes` DOIs all use `site_ids`, each plot site not listed in any of them produces a warning |
+| `campaign_name` exists | Must be in this bundle's `campaign_metadata.csv` or in production |
+| Scopes exist | Each `sensor_name`, `plot_method`, `site_ids` entry and `trait` (+ `trait_method`) must exist for that campaign in this bundle or in production |
+| Existing DOI row | Reuse-if-identical on the `doi_unique` key, comparing `citation_text` |
+| Site coverage (warning) | If a campaign's `plot_information` / `plot_shapes` DOIs all use `site_ids`, each plot site in this bundle not listed in any of them produces a warning |
 
 `site_ids` is normalized during QAQC (trimmed, deduplicated and sorted) before it is staged.
 
 ### Cross-file checks
 
-Runs last, after all per-file checks. All checks in this section produce **warnings only** —
-none block ingestion. Checks require data from multiple bundle files simultaneously.
+Runs last, after all per-file checks, whenever `traits.csv` is in the bundle. All checks in
+this section produce **warnings only** — none block ingestion. Checks that compare two files are
+skipped when the other file isn't in the bundle.
 
 | Check | Detail |
 |-------|--------|
 | Plots with no traits | Each `(campaign_name, plot_name)` in `plots.geojson` that has no rows in `traits.csv` produces a warning. One warning per plot |
-| Traits with no granule coverage | Each unique `(campaign_name, plot_name)` in `traits.csv` that has no matching feature in `plots.geojson` produces a warning — field data exists but there is no imagery for those plots. One warning per pair |
+| Traits with no granule coverage | Each unique `(campaign_name, plot_name)` in `traits.csv` that has no matching feature in `plots.geojson` and isn't already in production produces a warning. One warning per pair |
 | Sample trait count below bundle mode | Groups `traits.csv` by `(campaign_name, plot_name, collection_date, sample_name)` and counts non-blank `trait` values per group. Warns for any sample whose count is below the bundle mode |
 | Samples with no trait measurements | Each sample group where every `trait` value is blank/null produces a warning. A bundle-level summary warning is also appended: "N of M samples in this bundle have no trait measurements" |
 
@@ -542,7 +589,7 @@ python schema/add_enum_values.py new_values.yaml \
 
 ```
 React Admin Page (superadmins Cognito group only)
-  - Upload panel: file inputs for all 6 files, submit button
+  - Upload panel: file inputs for each bundle file (any subset, at least one), submit button
   - Batch list: status, QAQC report, approve/reject buttons
   - QAQC_FAIL batches: per-file replace panel + Recheck Bundle button
          |
@@ -562,13 +609,14 @@ Ingest Trigger Lambda
          v  (async Lambda invoke)
 QAQC Lambda
   - Updates DynamoDB: status=QAQC_RUNNING, increments run_count, sets last_checked_at
-  - Downloads all 6 files from S3
+  - Downloads the files that were uploaded (a missing slot = not provided)
   - Loads enum values from production DB
-  - Loads production reference sets (campaign_sensor_set, granule_ids, plot sets, etc.)
-  - Runs all checks in dependency order, collecting ALL errors before failing
+  - Loads production reference sets (key sets + full rows for the reuse-if-identical rule)
+  - Runs the checks for the provided files in dependency order, collecting ALL errors;
+    a file that wasn't provided is reported as "not provided"
   - Writes full qaqc_report.json to S3
   - If errors: updates DynamoDB status=QAQC_FAIL with summary + S3 report key
-  - If pass: loads into vswir_plants_staging (pandas/geopandas bulk inserts)
+  - If pass: loads the new (not reused) rows into vswir_plants_staging
   - Updates DynamoDB: status=QAQC_PASS with row counts + S3 report key
          |
          v  (UI polls for status, admin reviews QAQC report)
@@ -581,7 +629,7 @@ QAQC Lambda
 POST /ingest/{batch_id}/approve  or  POST /ingest/{batch_id}/reject
          |
          +--[approve]--> Promotion Lambda
-         |                 - Copies staging → production in dependency order
+         |                 - Copies staging → production in dependency order (INSERT … SELECT, ids kept)
          |                 - Refreshes materialized view (plot_pixels_mv)
          |                 - Deletes staging rows for this batch_id
          |                 - Updates DynamoDB: status=PROMOTED
@@ -623,7 +671,7 @@ Batches are stored in the `vswir-plants-export-jobs` table with `job_type = inge
   "created_at":          "2026-04-03T00:00:00+00:00",
   "run_count":           2,
   "last_checked_at":     "2026-04-03T12:30:00+00:00",
-  "files":               ["campaign_metadata", "wavelengths", "..."],
+  "files":               ["campaign_metadata", "wavelengths", "..."],   // slots provided
   "qaqc_report": {
     "campaign_metadata": { "passed": true,  "row_count": 4 },
     "spectra":           { "passed": false, "row_count": 15420 }
@@ -707,6 +755,7 @@ api/backend/ingestion/
           plots.py
           traits.py
           spectra.py
+          doi.py
           cross_file.py            — cross-file data quality warnings (runs last)
           config/                  — per-file JSON schemas (required_cols, enums, pk_cols, ...)
           campaign_metadata.json
@@ -715,13 +764,14 @@ api/backend/ingestion/
           plots.json
           traits.json
           spectra.json
+          doi.json
     Dockerfile
     requirements.txt
 
   promotion/
     app/
       main.py                    — handler: auth → validate → promote → mark done
-      promote.py                 — staging → production transaction (pandas/geopandas)
+      promote.py                 — staging → production transaction (INSERT … SELECT per table)
     Dockerfile
     requirements.txt
 
@@ -733,9 +783,9 @@ api/backend/ingestion/
 schema/
   plants_v5_types.sql            — PostgreSQL enum type definitions
   plants_v5_tables.sql           — production schema
-  staging_tables.sql             — staging schema (mirrors production + batch_id column)
-  staging_views.sql              — staging views used by promotion
-  views.sql                      — production views and materialized views
+  plants_v5_staging_tables.sql   — staging schema (mirrors production + batch_id; ids from production sequences)
+  plants_v5_staging_views.sql    — staging views (staged rows joined to staging ∪ production parents)
+  plants_v5_views.sql            — production views
   add_enum_values.py             — CLI tool for appending new enum values
 ```
 

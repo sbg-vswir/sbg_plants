@@ -226,7 +226,7 @@ export const VIEW_CONFIG = {
       { id: 'end_date',         label: 'End Date:',         type: 'date' },
     ],
     select: [
-      'granule_id', 'campaign_name', 'sensor_name', 'acquisition_date',
+      'granule_id', 'campaign_name', 'sensor_name', 'sensor_date', 'acquisition_date',
       'acquisition_start_time', 'cloudy_conditions', 'cloud_type', 'gsd',
     ],
   },
@@ -234,13 +234,13 @@ export const VIEW_CONFIG = {
   extracted_spectra_view: {
     queryable: false,
     filters: [],
-    select: ['pixel_id', 'campaign_name', 'sensor_name', 'granule_id', 'plot_id', 'plot_name', 'shade_mask'],
+    select: ['pixel_id', 'campaign_name', 'sensor_name', 'sensor_date', 'granule_id', 'plot_id', 'plot_name', 'shade_mask'],
   },
 
   reflectance_view: {
     queryable: false,
     filters: [],
-    select: ['pixel_id', 'campaign_name', 'sensor_name', 'granule_id', 'plot_id', 'plot_name', 'lon', 'lat', 'elevation', 'cloudy_conditions', 'cloud_type'],
+    select: ['pixel_id', 'campaign_name', 'sensor_name', 'sensor_date', 'granule_id', 'plot_id', 'plot_name', 'lon', 'lat', 'elevation', 'cloudy_conditions', 'cloud_type'],
   },
 
   extracted_metadata_view: {

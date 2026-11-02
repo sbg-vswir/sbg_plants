@@ -6,7 +6,11 @@ through the pipeline, and assembles the final report dict.
 
 To add a check for a new bundle file:
   1. Create app/checks/<file_name>.py with a check(context) -> CheckResult function.
-  2. Import it below and add it to CHECKS.
+  2. Import it below and add it to CHECKS with its bundle slot.
+
+Every file is optional (partial bundles). A check whose file isn't in the
+bundle is skipped and reported as not provided; checks downstream of it fall
+back to production for anything it would have forwarded.
 """
 
 from __future__ import annotations
@@ -21,15 +25,16 @@ logger = logging.getLogger(__name__)
 # Execution order matters — each check may read from context.output values
 # written by earlier checks (e.g. campaign writes campaign_sensor_set which
 # wavelengths and granule read).
+# (module, bundle slot it checks); cross_file runs whenever traits.csv is present.
 CHECKS = [
-    campaign,
-    wavelengths,
-    granule,
-    plots,
-    traits,
-    spectra,
-    doi,  # reads campaign_sensor_set and the plots/traits data
-    cross_file,
+    (campaign,    "campaign_metadata"),
+    (wavelengths, "wavelengths"),
+    (granule,     "granule_metadata"),
+    (plots,       "plots"),
+    (traits,      "traits"),
+    (spectra,     "spectra"),
+    (doi,         "doi"),  # reads campaign_sensor_set and the plots/traits data
+    (cross_file,  None),
 ]
 
 
@@ -44,7 +49,11 @@ def run_all(context: CheckContext) -> tuple[dict, bool]:
     report:     dict = {}
     has_errors: bool = False
 
-    for module in CHECKS:
+    for module, slot in CHECKS:
+        if slot is not None and context.data.get(slot) is None:
+            logger.info("Skipping check: %s (file not provided)", slot)
+            report[slot] = {"row_count": 0, "errors": [], "warnings": [], "not_provided": True}
+            continue
         logger.info("Running check: %s", module.__name__.split(".")[-1])
         result: CheckResult = module.check(context)
 

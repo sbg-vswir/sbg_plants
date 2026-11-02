@@ -41,6 +41,7 @@ def get_file_slots() -> dict:
 def get_upload_urls(batch_id: str) -> dict:
     """
     Generate presigned S3 PUT URLs for each file slot in a new batch.
+    Every slot is optional — the frontend uploads only the files it has.
     Returns { slot_name: presigned_url }
     """
     slots = get_file_slots()
@@ -70,8 +71,8 @@ def get_replace_url(batch_id: str, slot: str) -> str:
     )
 
 
-def create_batch_record(batch_id: str, username: str, uploaded_at: str, name: str) -> None:
-    """Write the initial PENDING record to DynamoDB."""
+def create_batch_record(batch_id: str, username: str, uploaded_at: str, name: str, files: list) -> None:
+    """Write the initial PENDING record to DynamoDB. files = the slots provided."""
     dynamodb.put_item(
         TableName=JOB_TABLE,
         Item={
@@ -82,7 +83,7 @@ def create_batch_record(batch_id: str, username: str, uploaded_at: str, name: st
             "uploaded_by": {"S": username},
             "uploaded_at": {"S": uploaded_at},
             "created_at":  {"S": uploaded_at},
-            "files":       {"SS": list(get_file_slots().keys())},
+            "files":       {"SS": files},
         },
     )
     logger.info("Created DynamoDB record batch_id=%s name=%r", batch_id, name)

@@ -3,6 +3,7 @@
     "granule_id",
     "campaign_name",
     "sensor_name",
+    "sensor_date",
     "acquisition_date",
     "acquisition_start_time",
     "cloudy_conditions",
@@ -22,6 +23,7 @@
     "cloud_type":        "CLOUD_type"
   },
   "type_cols": {
+    "sensor_date":            "date",
     "acquisition_date":       "date",
     "acquisition_start_time": "time",
     "gsd":                    "float",

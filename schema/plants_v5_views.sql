@@ -84,6 +84,7 @@ SELECT
     g.granule_id,
     g.campaign_name,
     g.sensor_name,
+    g.sensor_date,
     g.acquisition_date,
     g.acquisition_start_time,
     g.cloudy_conditions,
@@ -104,6 +105,7 @@ SELECT
     es.pixel_id,
     g.campaign_name,
     g.sensor_name,
+    g.sensor_date,
     p.granule_id,
     g.acquisition_date,
     g.acquisition_start_time,
@@ -130,13 +132,16 @@ JOIN vswir_plants.granule g ON g.granule_id = p.granule_id
 JOIN vswir_plants.plot pl ON pl.plot_id = p.plot_id;
 
 -- ── extracted_metadata_view ───────────────────────────────────────────────────
--- One row per (campaign, sensor). Provides wavelength centers and FWHM used
--- by the frontend to build spectra CSV headers. Used by GET /query/metadata.
+-- One row per (campaign, sensor, sensor_date) — one per sensor calibration.
+-- Provides wavelength centers and FWHM used by the frontend to build spectra
+-- CSV headers. Used by GET /query/metadata. Match it to spectra through the
+-- granule's sensor_date, not just campaign + sensor.
 
 CREATE VIEW vswir_plants.extracted_metadata_view AS
 SELECT
     sc.campaign_name,
     sc.sensor_name,
+    sc.sensor_date,
     sc.elevation_source,
     sc.wavelength_center,
     sc.fwhm
@@ -151,6 +156,7 @@ SELECT
     opr.pixel_id,
     g.campaign_name,
     g.sensor_name,
+    g.sensor_date,
     p.granule_id,
     g.acquisition_date,
     g.acquisition_start_time,

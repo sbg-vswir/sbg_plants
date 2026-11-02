@@ -21,11 +21,18 @@ Every function returns a list of error or warning dicts (empty list = pass):
 ── Cross-reference checks ────────────────────────────────────────────────────
     check_foreign_key(df, key_cols, reference_set, file_name, column)
     check_not_in_db(df, key_col, db_set, file_name, column)
+    check_existing_identical(df, key_cols, compare_cols, db_rows, file_name, label)
+
+── Value normalization (shared with db_refs so bundle and DB keys line up) ──
+    normalize(val, typ)
+    row_key(row, key_cols, required)
+    values_match(bundle_val, prod_val, typ)
 """
 
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime
 from pathlib import Path
 
@@ -317,3 +324,135 @@ def check_not_in_db(
             column=column or key_col,
         ))
     return errors
+
+
+def check_existing_identical(
+    df: pd.DataFrame,
+    key_cols: dict[str, str],
+    compare_cols: dict[str, str],
+    db_rows: dict,
+    file_name: str,
+    label: str,
+    required: list[str] | None = None,
+) -> tuple[list[dict], list[dict], pd.Series]:
+    """
+    Reuse-if-identical rule for rows that may already be in production.
+
+    key_cols / compare_cols: { column: type } — type is one of the normalize()
+                             types. key_cols form the natural key.
+    db_rows: { normalized key tuple: { column: value } } from db_refs.
+    required: key columns that must be non-blank (default: all of them);
+              the others are optional scopes where blank is part of the key.
+
+    For each row whose key is already in production:
+      - every compare column matches → the row is reused (not staged again)
+      - any compare column differs   → one error per key naming the columns
+    Rows with a blank required key part are skipped (the missing-value check
+    reports them).
+
+    Returns (errors, warnings, existing) — existing is a boolean Series on
+    df.index, True for rows whose key is already in production. The staging
+    load drops those rows.
+    """
+    errors   = []
+    existing = pd.Series(False, index=df.index)
+    if df.empty or not db_rows or any(c not in df.columns for c in key_cols):
+        return errors, [], existing
+
+    checked = set()
+    for idx, row in df.iterrows():
+        key = row_key(row, key_cols, required)
+        if key is None or key not in db_rows:
+            continue
+        existing[idx] = True
+        if key in checked:
+            continue
+        checked.add(key)
+        prod  = db_rows[key]
+        diffs = [
+            c for c, typ in compare_cols.items()
+            if c in df.columns and not values_match(row[c], prod.get(c), typ)
+        ]
+        if diffs:
+            key_desc  = ", ".join(f"{c}='{row[c]}'" for c in key_cols)
+            diff_desc = "; ".join(
+                f"{c}: bundle '{row[c]}' vs production '{prod.get(c)}'" for c in diffs
+            )
+            errors.append(_err(
+                file_name,
+                f"{label} ({key_desc}) already exists in production with different values — {diff_desc}",
+                row=idx + 2,
+            ))
+
+    warnings = []
+    if len(checked) and not errors:
+        warnings.append(_err(
+            file_name,
+            f"{len(checked)} {label}(s) already in production with identical values — reused, not added again",
+        ))
+    return errors, warnings, existing
+
+
+# ── Value normalization ────────────────────────────────────────────────────────
+
+_BOOL_TRUE  = {"true", "t", "yes", "y", "1", "1.0"}
+_BOOL_FALSE = {"false", "f", "no", "n", "0", "0.0"}
+
+
+def normalize(val, typ: str = "str"):
+    """
+    Normalize a bundle (string) or DB value so the two compare equal.
+    typ: str | lower | float | int | bool | date | floatlist | strlist.
+    Blank → None. Unparseable values are returned as the stripped string
+    (the type checks report those separately).
+    """
+    if typ in ("floatlist", "strlist"):
+        if val is None or (not isinstance(val, (list, tuple)) and _is_blank(val)):
+            return None
+        items = val if isinstance(val, (list, tuple)) else str(val).split(";")
+        items = [str(v).strip() for v in items if str(v).strip()]
+        if typ == "strlist":
+            return tuple(sorted(set(items))) or None
+        return tuple(float(v) for v in items) or None
+    if isinstance(val, (list, tuple)) or _is_blank(val):
+        return None
+    s = str(val).strip()
+    try:
+        if typ == "lower":
+            return s.lower()
+        if typ == "float":
+            return float(s)
+        if typ == "int":
+            return int(float(s))
+        if typ == "bool":
+            if isinstance(val, bool):
+                return val
+            low = s.lower()
+            return True if low in _BOOL_TRUE else False if low in _BOOL_FALSE else s
+        if typ == "date":
+            return pd.to_datetime(s).date().isoformat()
+    except (ValueError, TypeError):
+        return s
+    return s
+
+
+def row_key(row, key_cols: dict[str, str], required: list[str] | None = None) -> tuple | None:
+    """
+    Normalized key tuple for a row, or None if a required key part is blank.
+    required defaults to every key column.
+    """
+    required = key_cols if required is None else required
+    key = tuple(normalize(row.get(c), typ) for c, typ in key_cols.items())
+    if any(k is None for c, k in zip(key_cols, key) if c in required):
+        return None
+    return key
+
+
+def values_match(bundle_val, prod_val, typ: str) -> bool:
+    """True if two values are equal after normalizing; floats within FLOAT4 precision."""
+    a, b = normalize(bundle_val, typ), normalize(prod_val, typ)
+    if typ == "floatlist" and a is not None and b is not None:
+        return len(a) == len(b) and all(math.isclose(x, y, rel_tol=1e-6) for x, y in zip(a, b))
+    if typ == "float" and isinstance(a, float) and isinstance(b, float):
+        return math.isclose(a, b, rel_tol=1e-6)  # FLOAT4 keeps ~7 significant digits
+    return a == b

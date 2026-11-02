@@ -3,8 +3,17 @@
 -- Mirrors vswir_plants schema with the following differences:
 --   1. Schema is vswir_plants_staging instead of vswir_plants
 --   2. Every table has a batch_id VARCHAR NOT NULL column
---   3. Foreign keys reference staging tables (not production)
---   4. Serial IDs use staging sequences — thrown away on promotion
+--   3. No foreign key to a parent that may already be in production (campaign,
+--      sensor_campaign, granule, plot, plot_raster_intersect, plot event,
+--      sample). A batch can add to data that is already in production, so
+--      those references are checked by QAQC against bundle + production, and
+--      the production foreign keys enforce them again on promotion. Only
+--      references that always stay inside one batch keep a staging FK
+--      (plot_raster_intersect → plot_shape, extracted_spectra → pixel).
+--   4. plot_id, plot_shape_id and pixel_id come from the PRODUCTION sequences,
+--      so a staged row already has the id it keeps in production and child
+--      rows can point at either a staged or a production parent. Promotion is
+--      a straight copy. Run plants_v5_tables.sql first (the sequences must exist).
 --   5. Enum types are reused from vswir_plants schema (same DB, different schema)
 --   6. output_pixel_data_products / output_pixel_rfl are staged here, scoped by
 --      job_id, and held until reviewed and promoted to production.
@@ -55,9 +64,6 @@ CREATE TABLE vswir_plants_staging.doi (
     trait         vswir_plants."Trait",
     site_ids      VARCHAR[],
     batch_id      VARCHAR                       NOT NULL,
-    CONSTRAINT staging_doi_campaign_fkey FOREIGN KEY (campaign_name, batch_id)
-        REFERENCES vswir_plants_staging.campaign(campaign_name, batch_id)
-        ON DELETE CASCADE,
     CONSTRAINT staging_doi_format_chk CHECK (
         doi ~ '^10\.[0-9]{4,9}/\S+$'),
     CONSTRAINT staging_doi_site_ids_chk CHECK (
@@ -94,14 +100,12 @@ CREATE UNIQUE INDEX staging_doi_unique ON vswir_plants_staging.doi
 CREATE TABLE vswir_plants_staging.sensor_campaign (
     campaign_name     VARCHAR                          NOT NULL,
     sensor_name       vswir_plants."Sensor_name"       NOT NULL,
+    sensor_date       DATE                             NOT NULL,
     elevation_source  vswir_plants."ELEVATION_source"  NOT NULL,
     wavelength_center FLOAT4[]                         NOT NULL,
     fwhm              FLOAT4[]                         NOT NULL,
     batch_id          VARCHAR                          NOT NULL,
-    CONSTRAINT staging_sensor_campaign_pk PRIMARY KEY (campaign_name, sensor_name, batch_id),
-    CONSTRAINT staging_sensor_campaign_fkey FOREIGN KEY (campaign_name, batch_id)
-        REFERENCES vswir_plants_staging.campaign(campaign_name, batch_id)
-        ON DELETE CASCADE
+    CONSTRAINT staging_sensor_campaign_pk PRIMARY KEY (campaign_name, sensor_name, sensor_date, batch_id)
 );
 
 -- ── granule ───────────────────────────────────────────────────────────────────
@@ -110,6 +114,7 @@ CREATE TABLE vswir_plants_staging.granule (
     granule_id             VARCHAR                         NOT NULL,
     campaign_name          VARCHAR                         NOT NULL,
     sensor_name            vswir_plants."Sensor_name"      NOT NULL,
+    sensor_date            DATE                            NOT NULL,
     acquisition_start_time TIME                            NOT NULL,
     acquisition_date       DATE                            NOT NULL,
     granule_rad_url        VARCHAR,
@@ -120,10 +125,7 @@ CREATE TABLE vswir_plants_staging.granule (
     gsd                    FLOAT4                          NOT NULL,
     raster_epsg            INTEGER                         NOT NULL,
     batch_id               VARCHAR                         NOT NULL,
-    CONSTRAINT staging_granule_pk PRIMARY KEY (granule_id, batch_id),
-    CONSTRAINT staging_granule_fkey FOREIGN KEY (campaign_name, sensor_name, batch_id)
-        REFERENCES vswir_plants_staging.sensor_campaign(campaign_name, sensor_name, batch_id)
-        ON DELETE CASCADE
+    CONSTRAINT staging_granule_pk PRIMARY KEY (granule_id, batch_id)
 );
 
 -- ── plot_shape ────────────────────────────────────────────────────────────────
@@ -131,7 +133,7 @@ CREATE TABLE vswir_plants_staging.granule (
 -- polygons); staging was still restricted to POLYGON only.
 
 CREATE TABLE vswir_plants_staging.plot_shape (
-    plot_shape_id SERIAL,
+    plot_shape_id INTEGER                  NOT NULL DEFAULT nextval('vswir_plants.plot_shape_plot_shape_id_seq'),
     geom          geometry(GEOMETRY, 4326) NOT NULL,
     batch_id      VARCHAR                  NOT NULL,
     CONSTRAINT staging_plot_shape_pk PRIMARY KEY (plot_shape_id, batch_id)
@@ -143,16 +145,14 @@ CREATE INDEX staging_plot_shape_geom_idx
 -- ── plot ──────────────────────────────────────────────────────────────────────
 
 CREATE TABLE vswir_plants_staging.plot (
-    plot_id       SERIAL,
+    plot_id       INTEGER                   NOT NULL DEFAULT nextval('vswir_plants.plot_plot_id_seq'),
     campaign_name VARCHAR                   NOT NULL,
     site_id       VARCHAR                   NOT NULL,
     plot_name     VARCHAR                   NOT NULL,
     plot_method   vswir_plants."PLOT_method",
     batch_id      VARCHAR                   NOT NULL,
     CONSTRAINT staging_plot_pk PRIMARY KEY (plot_id, batch_id),
-    CONSTRAINT staging_plot_campaign_fkey FOREIGN KEY (campaign_name, batch_id)
-        REFERENCES vswir_plants_staging.campaign(campaign_name, batch_id)
-        ON DELETE CASCADE
+    CONSTRAINT staging_plot_unique UNIQUE (campaign_name, plot_name, batch_id)
 );
 
 -- ── plot_raster_intersect ─────────────────────────────────────────────────────
@@ -167,12 +167,6 @@ CREATE TABLE vswir_plants_staging.plot_raster_intersect (
     batch_id                 VARCHAR                           NOT NULL,
     polygon_confidence vswir_plants."POLYGON_confidence" NOT NULL,
     CONSTRAINT staging_plot_raster_intersect_pk PRIMARY KEY (plot_id, granule_id, batch_id),
-    CONSTRAINT staging_pri_granule_fkey FOREIGN KEY (granule_id, batch_id)
-        REFERENCES vswir_plants_staging.granule(granule_id, batch_id)
-        ON DELETE CASCADE,
-    CONSTRAINT staging_pri_plot_fkey FOREIGN KEY (plot_id, batch_id)
-        REFERENCES vswir_plants_staging.plot(plot_id, batch_id)
-        ON DELETE CASCADE,
     CONSTRAINT staging_pri_plot_shape_fkey FOREIGN KEY (plot_shape_id, batch_id)
         REFERENCES vswir_plants_staging.plot_shape(plot_shape_id, batch_id)
         ON DELETE CASCADE
@@ -182,7 +176,7 @@ CREATE TABLE vswir_plants_staging.plot_raster_intersect (
 -- FIX: cosine_i is NOT NULL in prod; staging had it nullable.
 
 CREATE TABLE vswir_plants_staging.pixel (
-    pixel_id          SERIAL,
+    pixel_id          INTEGER NOT NULL DEFAULT nextval('vswir_plants.pixel_pixel_id_seq'),
     plot_id           INTEGER NOT NULL,
     granule_id        VARCHAR NOT NULL,
     glt_row           INTEGER NOT NULL,
@@ -202,10 +196,7 @@ CREATE TABLE vswir_plants_staging.pixel (
     lat               FLOAT4  NOT NULL,
     elevation         FLOAT4  NOT NULL,
     batch_id          VARCHAR NOT NULL,
-    CONSTRAINT staging_pixel_pk PRIMARY KEY (pixel_id, batch_id),
-    CONSTRAINT staging_pixel_fkey FOREIGN KEY (plot_id, granule_id, batch_id)
-        REFERENCES vswir_plants_staging.plot_raster_intersect(plot_id, granule_id, batch_id)
-        ON DELETE CASCADE
+    CONSTRAINT staging_pixel_pk PRIMARY KEY (pixel_id, batch_id)
 );
 
 CREATE UNIQUE INDEX staging_pixel_idx
@@ -262,10 +253,7 @@ CREATE TABLE vswir_plants_staging.insitu_plot_event (
     subplot_cover_method vswir_plants."SUBPLOT_cover_method" NOT NULL,
     floristic_survey     BOOLEAN                             NOT NULL,
     batch_id             VARCHAR                             NOT NULL,
-    CONSTRAINT staging_insitu_plot_event_pk PRIMARY KEY (plot_id, collection_date, batch_id),
-    CONSTRAINT staging_insitu_plot_event_plot_fkey FOREIGN KEY (plot_id, batch_id)
-        REFERENCES vswir_plants_staging.plot(plot_id, batch_id)
-        ON DELETE CASCADE
+    CONSTRAINT staging_insitu_plot_event_pk PRIMARY KEY (plot_id, collection_date, batch_id)
 );
 
 -- ── sample ────────────────────────────────────────────────────────────────────
@@ -282,10 +270,7 @@ CREATE TABLE vswir_plants_staging.sample (
     plant_status      vswir_plants."PLANT_status"      NOT NULL,
     canopy_position   vswir_plants."CANOPY_position"   NOT NULL,
     batch_id          VARCHAR                          NOT NULL,
-    CONSTRAINT staging_sample_pk PRIMARY KEY (plot_id, collection_date, sample_name, batch_id),
-    CONSTRAINT staging_sample_event_fkey FOREIGN KEY (plot_id, collection_date, batch_id)
-        REFERENCES vswir_plants_staging.insitu_plot_event(plot_id, collection_date, batch_id)
-        ON DELETE CASCADE
+    CONSTRAINT staging_sample_pk PRIMARY KEY (plot_id, collection_date, sample_name, batch_id)
 );
 
 -- ── leaf_traits ───────────────────────────────────────────────────────────────
@@ -307,10 +292,7 @@ CREATE TABLE vswir_plants_staging.leaf_traits (
     error           FLOAT4,
     error_type      vswir_plants."Error_type",
     batch_id        VARCHAR                        NOT NULL,
-    CONSTRAINT staging_leaf_traits_pk PRIMARY KEY (trait_id, batch_id),
-    CONSTRAINT staging_leaf_traits_sample_fkey FOREIGN KEY (plot_id, collection_date, sample_name, batch_id)
-        REFERENCES vswir_plants_staging.sample(plot_id, collection_date, sample_name, batch_id)
-        ON DELETE CASCADE
+    CONSTRAINT staging_leaf_traits_pk PRIMARY KEY (trait_id, batch_id)
 );
 
 ALTER TABLE vswir_plants_staging.leaf_traits
@@ -322,5 +304,6 @@ UNIQUE (
     trait,
     method,
     handling,
-    units
+    units,
+    batch_id
 );

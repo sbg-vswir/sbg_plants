@@ -15,6 +15,9 @@ from shapely.geometry import shape
 import psycopg2.extras
 from contextlib import contextmanager
 
+from app.checks.universal import row_key
+from app.db_refs import PLOT_KEY
+
 logger     = logging.getLogger(__name__)
 CHUNK_SIZE = 5000
 
@@ -129,10 +132,21 @@ def purge_staging(conn, batch_id: str) -> None:
     logger.info("Purged any existing staging rows for batch_id=%s", batch_id)
 
 
-def load_all(conn, batch_id: str, dfs: dict) -> dict:
+def load_all(conn, batch_id: str, dfs: dict, existing: dict, prod_plot_ids: dict) -> dict:
     """
     Load all bundle data into staging in dependency order.
     Returns row counts per table.
+
+    dfs:           { slot: DataFrame | None } — None for a file not in the bundle.
+    existing:      { table: boolean Series } from QAQC — rows already in
+                   production with identical values. They are reused, not staged.
+    prod_plot_ids: { (campaign_name, plot_name): plot_id } for production plots.
+
+    plot_id / plot_shape_id / pixel_id come from the production sequences (see
+    plants_v5_staging_tables.sql), so child rows store the id the parent has
+    (or will have) in production, whether the parent is new in this batch or
+    already in production. A child whose parent can't be resolved raises —
+    QAQC should already have caught it, so this is a bug, not a data error.
 
     conn is a SQLAlchemy Connection. Every loader below is passed conn itself
     (never conn.engine) so every insert shares this exact connection/transaction.
@@ -150,30 +164,51 @@ def load_all(conn, batch_id: str, dfs: dict) -> dict:
     """
     raw = conn.connection
 
+    def new_rows(df, table):
+        """Rows of df not already in production (None if the file wasn't provided)."""
+        if df is None:
+            return None
+        mask = existing.get(table)
+        return df if mask is None else df[~mask.reindex(df.index, fill_value=False)]
+
+    campaign_df = dfs["campaign_metadata"]
+    plots_gdf   = dfs["plot_geometry"]
+    traits_df   = dfs["traits"]
+    spectra_df  = dfs["spectra"]
+
     row_counts = {}
     with staging_transaction(conn):
-        row_counts["campaign"]              = _load_campaign(conn, dfs["campaign_metadata"], batch_id)
-        row_counts["doi"]                   = _load_doi(raw, dfs["doi"], batch_id)
-        row_counts["sensor_campaign"]       = _load_sensor_campaign(raw, dfs["campaign_metadata"], batch_id)
-        row_counts["granule"]               = _load_granule(conn, dfs["granule_metadata"], batch_id)
-        shape_id_map                        = _load_plot_shapes(conn, dfs["plot_geometry"], batch_id)
-        row_counts["plot_shape"]            = len(shape_id_map)
-        plot_id_map                         = _load_plots(raw, dfs["plot_geometry"], batch_id)
-        row_counts["plot"]                  = len(plot_id_map)
-        row_counts["plot_raster_intersect"] = _load_plot_raster_intersect(conn, dfs["plot_geometry"], plot_id_map, shape_id_map, batch_id)
-        row_counts["insitu_plot_event"]     = _load_insitu_plot_event(conn, dfs["traits"], plot_id_map, batch_id)
-        row_counts["sample"]                = _load_sample(conn, dfs["traits"], plot_id_map, batch_id)
-        row_counts["leaf_traits"]           = _load_leaf_traits(conn, dfs["traits"], plot_id_map, batch_id)
-        pixel_id_map                        = _load_pixels(raw, dfs["spectra"], plot_id_map, batch_id)
-        row_counts["pixel"]                 = len(pixel_id_map)
-        row_counts["extracted_spectra"]     = _load_spectra(raw, dfs["spectra"], pixel_id_map, batch_id)
+        row_counts["campaign"]        = _load_campaign(conn, new_rows(campaign_df, "campaign"), batch_id)
+        row_counts["doi"]             = _load_doi(raw, new_rows(dfs["doi"], "doi"), batch_id)
+        row_counts["sensor_campaign"] = _load_sensor_campaign(raw, new_rows(campaign_df, "sensor_campaign"), batch_id)
+        row_counts["granule"]         = _load_granule(conn, dfs["granule_metadata"], batch_id)
+
+        plot_lookup = dict(prod_plot_ids)
+        if plots_gdf is not None and not plots_gdf.empty:
+            new_plot_ids = _load_plots(raw, new_rows(plots_gdf, "plot"), batch_id)
+            plot_lookup.update(new_plot_ids)
+            row_counts["plot"]                  = len(new_plot_ids)
+            row_counts["plot_shape"]            = len(plots_gdf)
+            row_counts["plot_raster_intersect"] = _load_plot_raster_intersect(conn, plots_gdf, plot_lookup, batch_id)
+
+        if traits_df is not None and not traits_df.empty:
+            row_counts["insitu_plot_event"] = _load_insitu_plot_event(conn, new_rows(traits_df, "insitu_plot_event"), plot_lookup, batch_id)
+            row_counts["sample"]            = _load_sample(conn, new_rows(traits_df, "sample"), plot_lookup, batch_id)
+            row_counts["leaf_traits"]       = _load_leaf_traits(conn, new_rows(traits_df, "leaf_traits"), plot_lookup, batch_id)
+
+        if spectra_df is not None and not spectra_df.empty:
+            pixel_id_map                    = _load_pixels(raw, spectra_df, plot_lookup, batch_id)
+            row_counts["pixel"]             = len(pixel_id_map)
+            row_counts["extracted_spectra"] = _load_spectra(raw, spectra_df, plot_lookup, pixel_id_map, batch_id)
 
     return row_counts
 
 
 # ── Loaders ───────────────────────────────────────────────────────────────────
 
-def _load_campaign(conn, df: pd.DataFrame, batch_id: str) -> int:
+def _load_campaign(conn, df: pd.DataFrame | None, batch_id: str) -> int:
+    if df is None or df.empty:
+        return 0
     out = (
         df[["campaign_name", "primary_funding_source", "data_repository", "taxa_system"]]
         .drop_duplicates("campaign_name")
@@ -187,14 +222,14 @@ def _load_campaign(conn, df: pd.DataFrame, batch_id: str) -> int:
     return len(out)
 
 
-def _load_doi(conn, df: pd.DataFrame, batch_id: str) -> int:
+def _load_doi(conn, df: pd.DataFrame | None, batch_id: str) -> int:
     """
     Insert doi.csv rows into the doi staging table, one row per csv row.
     Uses execute_values because site_ids is a VARCHAR[] array. site_ids
     arrives already normalized (sorted, ';'-joined) from checks/doi.py, and
     duplicates were already rejected there, so nothing is deduped here.
     """
-    if df.empty:
+    if df is None or df.empty:
         return 0
     cols = ["campaign_name", "doi", "citation_text", "role",
             "sensor_name", "plot_method", "trait", "trait_method"]
@@ -218,16 +253,19 @@ def _load_doi(conn, df: pd.DataFrame, batch_id: str) -> int:
     return len(rows)
 
 
-def _load_sensor_campaign(conn, df: pd.DataFrame, batch_id: str) -> int:
+def _load_sensor_campaign(conn, df: pd.DataFrame | None, batch_id: str) -> int:
     """Uses execute_values because wavelength_center and fwhm are FLOAT4[] arrays."""
+    if df is None or df.empty:
+        return 0
     out = (
-        df[["campaign_name", "sensor_name", "elevation_source", "wavelength_center", "fwhm"]]
-        .drop_duplicates(["campaign_name", "sensor_name"])
+        df[["campaign_name", "sensor_name", "sensor_date", "elevation_source", "wavelength_center", "fwhm"]]
+        .drop_duplicates(["campaign_name", "sensor_name", "sensor_date"])
     )
     rows = [
         (
             row["campaign_name"],
             row["sensor_name"],
+            row["sensor_date"],
             row["elevation_source"],
             row["wavelength_center"],  # already a list from main.py
             row["fwhm"],
@@ -238,14 +276,13 @@ def _load_sensor_campaign(conn, df: pd.DataFrame, batch_id: str) -> int:
     with conn.cursor() as cur:
         psycopg2.extras.execute_values(cur, """
             INSERT INTO vswir_plants_staging.sensor_campaign
-                (campaign_name, sensor_name, elevation_source, wavelength_center, fwhm, batch_id)
+                (campaign_name, sensor_name, sensor_date, elevation_source, wavelength_center, fwhm, batch_id)
             VALUES %s
-            ON CONFLICT DO NOTHING
         """, rows)
     return len(rows)
 
 
-def _load_granule(conn, df: pd.DataFrame, batch_id: str) -> int:
+def _load_granule(conn, df: pd.DataFrame | None, batch_id: str) -> int:
     # Explicit column allowlist matching the granule table exactly — this
     # used to insert the whole parsed df as-is, which only worked by
     # coincidence (df happened to carry no extra columns). Same class of bug
@@ -253,8 +290,10 @@ def _load_granule(conn, df: pd.DataFrame, batch_id: str) -> int:
     # every DataFrame column, and any stray one not present on the table
     # fails with "column ... does not exist". Explicit is safe regardless of
     # what upstream parsing/QAQC checks add to df in the future.
+    if df is None or df.empty:
+        return 0
     granule_cols = [
-        "granule_id", "campaign_name", "sensor_name", "acquisition_start_time",
+        "granule_id", "campaign_name", "sensor_name", "sensor_date", "acquisition_start_time",
         "acquisition_date", "granule_rad_url", "granule_refl_url", "flightline_id",
         "cloudy_conditions", "cloud_type", "gsd", "raster_epsg",
     ]
@@ -272,14 +311,42 @@ def _load_granule(conn, df: pd.DataFrame, batch_id: str) -> int:
     return len(out)
 
 
-def _load_plot_shapes(conn, gdf: gpd.GeoDataFrame, batch_id: str) -> dict:
+def _load_plots(conn, gdf: gpd.GeoDataFrame, batch_id: str) -> dict:
     """
-    Insert plot shapes using GeoPandas to_postgis.
-    Returns { (campaign_name, plot_name, granule_id): staging_plot_shape_id }
+    Insert the plots that are new in this batch (plots already in production
+    were dropped by the caller). plot_id comes from the production sequence.
+    Returns { (campaign_name, plot_name): plot_id }
     """
-    keys = list(zip(gdf["campaign_name"], gdf["plot_name"], gdf["granule_id"]))
+    unique = gdf.drop_duplicates(subset=["campaign_name", "plot_name"])
+    if unique.empty:
+        return {}
+    plot_rows = list(zip(
+        unique["campaign_name"],
+        unique["site_id"],
+        unique["plot_name"],
+        unique["plot_method"].replace("", None) if "plot_method" in unique.columns else [None] * len(unique),
+        [batch_id] * len(unique),
+    ))
 
-    shapes = gdf[["geometry"]].copy()
+    with conn.cursor() as cur:
+        results = psycopg2.extras.execute_values(cur, """
+            INSERT INTO vswir_plants_staging.plot
+                (campaign_name, site_id, plot_name, plot_method, batch_id)
+            VALUES %s
+            RETURNING plot_id, campaign_name, plot_name
+        """, plot_rows, fetch=True)
+
+    return {row_key({"campaign_name": r[1], "plot_name": r[2]}, PLOT_KEY): r[0] for r in results}
+
+
+def _load_plot_raster_intersect(conn, gdf: gpd.GeoDataFrame, plot_lookup: dict, batch_id: str) -> int:
+    """
+    One plot shape and one intersect per plots.geojson feature (every
+    intersect is new — QAQC rejects one that's already in production). The
+    shapes are inserted first; plot_shape_id comes from the production
+    sequence, in insertion order.
+    """
+    shapes = gdf[[gdf.geometry.name]].copy()
     shapes["batch_id"] = batch_id
     # The staging plot_shape table's geometry column is named "geom", not
     # "geometry" (GeoPandas' default active-geometry column name from the
@@ -290,62 +357,29 @@ def _load_plot_shapes(conn, gdf: gpd.GeoDataFrame, batch_id: str) -> dict:
     # compile the insert, as a Find_SRID() failure rather than a clearer
     # "column does not exist" error.
     shapes = shapes.rename_geometry("geom")
-
     shapes.to_postgis(
         "plot_shape", conn, schema="vswir_plants_staging",
         if_exists="append", index=False,
     )
-
     with conn.connection.cursor() as cur:
         cur.execute("""
             SELECT plot_shape_id FROM vswir_plants_staging.plot_shape
             WHERE batch_id = %s ORDER BY plot_shape_id
         """, (batch_id,))
-        ids = [r[0] for r in cur.fetchall()]
+        shape_ids = [r[0] for r in cur.fetchall()]
+    if len(shape_ids) != len(gdf):
+        raise RuntimeError(f"expected {len(gdf)} staged plot shapes, found {len(shape_ids)}")
 
-    return dict(zip(keys, ids))
-
-
-def _load_plots(conn, gdf: gpd.GeoDataFrame, batch_id: str) -> dict:
-    """
-    Insert unique plots using execute_values with RETURNING to capture plot_ids.
-    Returns { (campaign_name, plot_name): staging_plot_id }
-    """
-    unique = gdf.drop_duplicates(subset=["campaign_name", "plot_name"])
-    plot_rows = list(zip(
-        unique["campaign_name"],
-        unique["site_id"],
-        unique["plot_name"],
-        unique["plot_method"],
-        [batch_id] * len(unique),
-    ))
-
-    with conn.cursor() as cur:
-        results = psycopg2.extras.execute_values(cur, """
-            INSERT INTO vswir_plants_staging.plot
-                (campaign_name, site_id, plot_name, plot_method, batch_id)
-            VALUES %s
-            ON CONFLICT DO NOTHING
-            RETURNING plot_id, campaign_name, plot_name
-        """, plot_rows, fetch=True)
-
-    return {(r[1], r[2]): r[0] for r in results}
-
-
-def _load_plot_raster_intersect(conn, gdf: gpd.GeoDataFrame, plot_id_map: dict, shape_id_map: dict, batch_id: str) -> int:
     out = pd.DataFrame({
-        "plot_id":       [plot_id_map.get((c, p)) for c, p in zip(gdf["campaign_name"], gdf["plot_name"])],
-        "granule_id":    gdf["granule_id"],
-        "plot_shape_id": [shape_id_map.get((c, p, g)) for c, p, g in
-                           zip(gdf["campaign_name"], gdf["plot_name"], gdf["granule_id"])],
-        "extraction_method":        gdf["extraction_method"],
-        "delineation_method":       gdf["delineation_method"],
-        "shape_aligned_to_granule": _coerce_bool(gdf["shape_aligned_to_granule"]),
-        "polygon_confidence": gdf["polygon_confidence"],
+        "plot_id":       _plot_ids(gdf, plot_lookup, "plots.geojson").values,
+        "granule_id":    gdf["granule_id"].values,
+        "plot_shape_id": shape_ids,
+        "extraction_method":        gdf["extraction_method"].values,
+        "delineation_method":       gdf["delineation_method"].values,
+        "shape_aligned_to_granule": _coerce_bool(gdf["shape_aligned_to_granule"]).values,
+        "polygon_confidence":       gdf["polygon_confidence"].values,
         "batch_id":                 batch_id,
     })
-    out = out.dropna(subset=["plot_id", "plot_shape_id"])
-
     out.to_sql(
         "plot_raster_intersect", conn, schema="vswir_plants_staging",
         if_exists="append", index=False, method="multi",
@@ -353,15 +387,17 @@ def _load_plot_raster_intersect(conn, gdf: gpd.GeoDataFrame, plot_id_map: dict, 
     return len(out)
 
 
-def _load_insitu_plot_event(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) -> int:
+def _load_insitu_plot_event(conn, df: pd.DataFrame, plot_lookup: dict, batch_id: str) -> int:
     out = (
         df[["campaign_name", "plot_name", "collection_date",
             "plot_veg_type", "subplot_cover_method", "floristic_survey"]]
         .drop_duplicates(["campaign_name", "plot_name", "collection_date"])
-        .assign(plot_id=lambda d: d.apply(lambda r: plot_id_map.get((r["campaign_name"], r["plot_name"])), axis=1))
-        .dropna(subset=["plot_id"])
-        .assign(
-            plot_id=lambda d: d["plot_id"].astype(int),
+    )
+    if out.empty:
+        return 0
+    out = (
+        out.assign(
+            plot_id=lambda d: _plot_ids(d, plot_lookup, "traits.csv"),
             floristic_survey=lambda d: _coerce_bool(d["floristic_survey"]),
             batch_id=batch_id,
         )
@@ -374,7 +410,7 @@ def _load_insitu_plot_event(conn, df: pd.DataFrame, plot_id_map: dict, batch_id:
     return len(out)
 
 
-def _load_sample(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) -> int:
+def _load_sample(conn, df: pd.DataFrame, plot_lookup: dict, batch_id: str) -> int:
     sample_cols = [
         "campaign_name", "plot_name", "collection_date", "sample_name",
         "taxa", "veg_or_cover_type", "phenophase", "sample_fc_class",
@@ -383,10 +419,12 @@ def _load_sample(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) -> in
     out = (
         df[sample_cols]
         .drop_duplicates(["campaign_name", "plot_name", "collection_date", "sample_name"])
-        .assign(plot_id=lambda d: d.apply(lambda r: plot_id_map.get((r["campaign_name"], r["plot_name"])), axis=1))
-        .dropna(subset=["plot_id"])
-        .assign(
-            plot_id=lambda d: d["plot_id"].astype(int),
+    )
+    if out.empty:
+        return 0
+    out = (
+        out.assign(
+            plot_id=lambda d: _plot_ids(d, plot_lookup, "traits.csv"),
             sample_fc_percent=lambda d: _coerce_int(d["sample_fc_percent"]).astype(int),  # INTEGER NOT NULL
             batch_id=batch_id,
         )
@@ -399,7 +437,7 @@ def _load_sample(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) -> in
     return len(out)
 
 
-def _load_leaf_traits(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) -> int:
+def _load_leaf_traits(conn, df: pd.DataFrame, plot_lookup: dict, batch_id: str) -> int:
     """
     Only rows with actual trait data get a leaf_traits record. Sample-only
     rows (trait/method/handling/units all blank) are skipped here — they
@@ -417,16 +455,14 @@ def _load_leaf_traits(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) 
     # error / error_type are nullable and may be omitted from traits.csv
     available_trait_cols = [c for c in trait_cols if c in df.columns]
     has_trait = df["trait"].notna() & (df["trait"].astype(str).str.strip() != "")
+    out = df.loc[has_trait, available_trait_cols]
+    if out.empty:
+        return 0
     out = (
-        df.loc[has_trait, available_trait_cols]
-        .assign(plot_id=lambda d: d.apply(lambda r: plot_id_map.get((r["campaign_name"], r["plot_name"])), axis=1))
-        .dropna(subset=["plot_id"])
-        .assign(plot_id=lambda d: d["plot_id"].astype(int), batch_id=batch_id)
+        out.assign(plot_id=lambda d: _plot_ids(d, plot_lookup, "traits.csv"), batch_id=batch_id)
         .drop(columns=["campaign_name", "plot_name"])
         .replace("", None)
     )
-    if out.empty:
-        return 0
     out.to_sql(
         "leaf_traits", conn, schema="vswir_plants_staging",
         if_exists="append", index=False, method="multi", chunksize=CHUNK_SIZE,
@@ -434,10 +470,11 @@ def _load_leaf_traits(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) 
     return len(out)
 
 
-def _load_pixels(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) -> dict:
+def _load_pixels(conn, df: pd.DataFrame, plot_lookup: dict, batch_id: str) -> dict:
     """
-    Bulk insert pixels using copy_expert for speed.
-    Returns { (campaign_name, plot_name, granule_id, glt_row, glt_column): staging_pixel_id }
+    Bulk insert pixels using copy_expert for speed. pixel_id comes from the
+    production sequence.
+    Returns { (plot_id, granule_id, glt_row, glt_column): pixel_id }
     """
     pixel_cols = [
         "campaign_name", "plot_name", "granule_id", "glt_row", "glt_column",
@@ -448,16 +485,10 @@ def _load_pixels(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) -> di
     out = (
         df[[c for c in pixel_cols if c in df.columns]]
         .assign(
-            plot_id=lambda d: d.apply(lambda r: plot_id_map.get((r["campaign_name"], r["plot_name"])), axis=1),
-            glt_row=lambda d: _coerce_int(d["glt_row"]),
-            glt_column=lambda d: _coerce_int(d["glt_column"]),
-        )
-        .dropna(subset=["plot_id", "glt_row", "glt_column"])
-        .assign(
-            plot_id=lambda d: d["plot_id"].astype(int),
-            glt_row=lambda d: d["glt_row"].astype(int),  # INTEGER NOT NULL, already coerced+dropna'd above
-            glt_column=lambda d: d["glt_column"].astype(int),  # INTEGER NOT NULL, already coerced+dropna'd above
-            shade_mask=lambda d: _coerce_bool(d["shade_mask"]),
+            plot_id=lambda d: _plot_ids(d, plot_lookup, "spectra.csv"),
+            glt_row=lambda d: _coerce_int(d["glt_row"]).astype(int),        # INTEGER NOT NULL, QAQC checked castable
+            glt_column=lambda d: _coerce_int(d["glt_column"]).astype(int),  # INTEGER NOT NULL, QAQC checked castable
+            shade_mask=lambda d: _coerce_bool(d["shade_mask"]) if "shade_mask" in d.columns else None,
             batch_id=batch_id,
         )
     )
@@ -488,44 +519,26 @@ def _load_pixels(conn, df: pd.DataFrame, plot_id_map: dict, batch_id: str) -> di
         """, (batch_id,))
         rows = cur.fetchall()
 
-    # Build reverse map: (campaign_name, plot_name, granule_id, glt_row, glt_col) → pixel_id
-    # Need plot_id → (campaign_name, plot_name) reverse map
-    reverse_plot = {v: k for k, v in plot_id_map.items()}
-    pixel_id_map = {}
-    for pixel_id, plot_id, granule_id, glt_row, glt_col in rows:
-        plot_key = reverse_plot.get(plot_id)
-        if plot_key:
-            pixel_id_map[(*plot_key, granule_id, glt_row, glt_col)] = pixel_id
-
-    return pixel_id_map
+    return {(plot_id, granule_id, glt_row, glt_col): pixel_id
+            for pixel_id, plot_id, granule_id, glt_row, glt_col in rows}
 
 
-def _load_spectra(conn, df: pd.DataFrame, pixel_id_map: dict, batch_id: str) -> int:
+def _load_spectra(conn, df: pd.DataFrame, plot_lookup: dict, pixel_id_map: dict, batch_id: str) -> int:
     """
     Bulk insert extracted_spectra using copy_expert.
     Assembles the radiance array per pixel and streams to Postgres.
     """
     band_cols = sorted([c for c in df.columns if _is_band_col(c)], key=int)
+    plot_ids  = _plot_ids(df, plot_lookup, "spectra.csv")
+    glt_rows  = _coerce_int(df["glt_row"]).astype(int)
+    glt_cols  = _coerce_int(df["glt_column"]).astype(int)
 
     rows = []
-    for _, row in df.iterrows():
-        # Same dtype=str issue as _load_pixels: glt_row/glt_column arrive as
-        # strings and can be formatted like "23730.0", which int() rejects
-        # outright. Go through float() first, and skip (rather than crash
-        # the whole batch) any row where they're blank/unparseable — pixel
-        # rows with the same issue were already dropped in _load_pixels, so
-        # such a spectra row could never have matched a pixel_id_map key
-        # anyway.
-        try:
-            glt_row = int(float(row["glt_row"]))
-            glt_column = int(float(row["glt_column"]))
-        except (ValueError, TypeError):
-            continue
-        key = (row["campaign_name"], row["plot_name"], row["granule_id"],
-               glt_row, glt_column)
+    for idx, row in df.iterrows():
+        key = (plot_ids[idx], row["granule_id"], glt_rows[idx], glt_cols[idx])
         pixel_id = pixel_id_map.get(key)
-        if not pixel_id:
-            continue
+        if pixel_id is None:
+            raise RuntimeError(f"spectra.csv row {idx + 2}: no staged pixel for {key}")
         radiance = "{" + ",".join(str(row[c]) for c in band_cols) + "}"
         rows.append(f"{pixel_id}\t{radiance}\t{batch_id}\n")
 
@@ -543,6 +556,24 @@ def _load_spectra(conn, df: pd.DataFrame, pixel_id_map: dict, batch_id: str) -> 
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _plot_ids(df: pd.DataFrame, plot_lookup: dict, file_name: str) -> pd.Series:
+    """
+    plot_id for each row's (campaign_name, plot_name), from this batch's new
+    plots or production. Raises instead of dropping rows that don't resolve.
+    """
+    ids = pd.Series(
+        [plot_lookup.get(row_key(r, PLOT_KEY)) for _, r in df[["campaign_name", "plot_name"]].iterrows()],
+        index=df.index, dtype=object,
+    )
+    missing = df.loc[ids.isna(), ["campaign_name", "plot_name"]].drop_duplicates()
+    if not missing.empty:
+        sample = ", ".join(f"({c}, {p})" for c, p in missing.head(5).itertuples(index=False))
+        raise RuntimeError(
+            f"{file_name}: {len(missing)} plot(s) not found in this batch or production: {sample}"
+        )
+    return ids.astype(int)
+
 
 def _is_band_col(col: str) -> bool:
     try:

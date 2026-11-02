@@ -2,6 +2,7 @@
   "required_cols": [
     "campaign_name",
     "sensor_name",
+    "sensor_date",
     "band",
     "wavelength",
     "fwhm"
@@ -12,9 +13,10 @@
     "sensor_name":   "Sensor_name"
   },
   "type_cols": {
+    "sensor_date": "date",
     "band":       "int",
     "wavelength": "float",
     "fwhm":       "float"
   },
-  "pk_cols": ["campaign_name", "sensor_name", "band"]
+  "pk_cols": ["campaign_name", "sensor_name", "sensor_date", "band"]
 }

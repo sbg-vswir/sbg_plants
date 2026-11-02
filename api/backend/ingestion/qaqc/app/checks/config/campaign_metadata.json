@@ -3,6 +3,7 @@
     "campaign_name",
     "primary_funding_source",
     "sensor_name",
+    "sensor_date",
     "elevation_source"
   ],
   "nullable_cols": [
@@ -15,6 +16,8 @@
     "sensor_name":      "Sensor_name",
     "elevation_source": "ELEVATION_source"
   },
-  "type_cols": {},
-  "pk_cols": ["campaign_name", "sensor_name"]
+  "type_cols": {
+    "sensor_date": "date"
+  },
+  "pk_cols": ["campaign_name", "sensor_name", "sensor_date"]
 }

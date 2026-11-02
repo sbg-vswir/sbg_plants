@@ -28,8 +28,10 @@ def parse_record(record: dict) -> dict:
     if spectral_metadata:
         campaign_name = spectral_metadata["campaign_name"]
         sensor_name   = spectral_metadata["sensor_name"]
+        sensor_date   = spectral_metadata.get("sensor_date")
         spectral_col  = spectral_metadata.get("spectral_column", "radiance")
-        key = f"exports/{campaign_name}_{sensor_name}_{spectral_col}_{job_id}.csv"
+        sensor_part   = f"{sensor_name}_{sensor_date}" if sensor_date else sensor_name
+        key = f"exports/{campaign_name}_{sensor_part}_{spectral_col}_{job_id}.csv"
     else:
         key = f"exports/{job_id}.csv"
 

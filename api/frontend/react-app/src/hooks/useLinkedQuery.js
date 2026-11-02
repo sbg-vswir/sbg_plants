@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { fetchLinkedQuery, fetchLinkedQueryAll } from '../utils/api';
-import { toRanges } from '../utils/helpers';
+import { toRanges, sensorKey } from '../utils/helpers';
 import { useSchema } from '../context/SchemaContext';
 
 /**
@@ -264,7 +264,7 @@ export function useLinkedQuery() {
 
     const grouped = {};
     for (const g of allGranules) {
-      const key = `${g.campaign_name}|${g.sensor_name}`;
+      const key = sensorKey(g.campaign_name, g.sensor_name, g.sensor_date);
       if (!grouped[key]) grouped[key] = [];
       if (Array.isArray(g.pixel_ids)) grouped[key].push(...g.pixel_ids);
     }
@@ -321,6 +321,7 @@ export function useLinkedQuery() {
         granule_id:             g.granule_id,
         campaign_name:          g.campaign_name,
         sensor_name:            g.sensor_name,
+        sensor_date:            g.sensor_date,
         acquisition_date:       g.acquisition_date,
         acquisition_start_time: g.acquisition_start_time,
         cloudy_conditions:      g.cloudy_conditions,

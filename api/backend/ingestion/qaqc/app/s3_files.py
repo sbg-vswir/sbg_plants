@@ -38,13 +38,18 @@ def get_file_slots() -> dict:
 
 def download_raw_files(batch_id: str) -> dict:
     """
-    Download all bundle files from S3 for a given batch.
+    Download the bundle files from S3 for a given batch. Every slot is
+    optional (partial bundles); a slot with no uploaded file is left out.
     Returns { slot_name: bytes }
     """
     raw = {}
     for slot, ext in get_file_slots().items():
         key = f"ingestion/{batch_id}/raw/{slot}{ext}"
-        resp = s3.get_object(Bucket=BUCKET, Key=key)
+        try:
+            resp = s3.get_object(Bucket=BUCKET, Key=key)
+        except s3.exceptions.NoSuchKey:
+            logger.info("Not provided: %s", key)
+            continue
         raw[slot] = resp["Body"].read()
         logger.info("Downloaded %s", key)
     return raw
@@ -55,24 +60,28 @@ def _stringify_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     gdf[cols] = gdf[cols].astype(str).where(gdf[cols].notna(), "")
     return gdf
 
-def parse_files(raw: dict) -> tuple:
+def parse_files(raw: dict) -> dict:
     """
-    Parse raw bytes into DataFrames and a GeoDataFrame.
-    Returns (df_campaign, df_wl, df_granule, df_traits, df_spectra, gdf_plots, df_doi)
-    Raises ValueError if any file cannot be parsed.
+    Parse raw bytes into DataFrames (CSVs) and a GeoDataFrame (plots).
+    Returns { slot_name: DataFrame | GeoDataFrame | None } for every slot in
+    the bundle config — None for a slot that wasn't provided.
+    Raises ValueError if no file was provided or a file cannot be parsed.
     """
-    try:
-        df_campaign = pd.read_csv(io.BytesIO(raw["campaign_metadata"]), dtype=str).fillna("")
-        df_wl       = pd.read_csv(io.BytesIO(raw["wavelengths"]),       dtype=str).fillna("")
-        df_granule  = pd.read_csv(io.BytesIO(raw["granule_metadata"]),  dtype=str).fillna("")
-        df_traits   = pd.read_csv(io.BytesIO(raw["traits"]),            dtype=str).fillna("")
-        df_spectra  = pd.read_csv(io.BytesIO(raw["spectra"]),           dtype=str).fillna("")
-        df_doi      = pd.read_csv(io.BytesIO(raw["doi"]),               dtype=str).fillna("")
-        gdf_plots = _stringify_properties(gpd.read_file(io.BytesIO(raw["plots"])))
-    except Exception as e:
-        raise ValueError(f"Failed to parse bundle files: {e}") from e
-
-    return df_campaign, df_wl, df_granule, df_traits, df_spectra, gdf_plots, df_doi
+    if not raw:
+        raise ValueError("No bundle files were provided")
+    parsed = {}
+    for slot in get_file_slots():
+        if slot not in raw:
+            parsed[slot] = None
+            continue
+        try:
+            if slot == "plots":
+                parsed[slot] = _stringify_properties(gpd.read_file(io.BytesIO(raw[slot])))
+            else:
+                parsed[slot] = pd.read_csv(io.BytesIO(raw[slot]), dtype=str).fillna("")
+        except Exception as e:
+            raise ValueError(f"Failed to parse {slot}: {e}") from e
+    return parsed
 
 
 def write_report(batch_id: str, status: str, qaqc_report: dict) -> str:

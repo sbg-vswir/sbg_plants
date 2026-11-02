@@ -24,13 +24,25 @@ def build_spectral_csv(rows: list, col_descriptions: list, spectral_metadata: di
     fixed_cols = [name for name in col_names if name != spectral_col]
     fixed_idxs = [i for i, name in enumerate(col_names) if name != spectral_col]
 
+    if len(wavelength_center) != len(fwhm_vals):
+        raise ValueError(
+            f"spectral_metadata has {len(wavelength_center)} wavelengths but {len(fwhm_vals)} fwhm values"
+        )
     spectral_headers = [f"{wl:.4f}|{fw:.4f}" for wl, fw in zip(wavelength_center, fwhm_vals)]
     headers = fixed_cols + spectral_headers
 
+    # Every spectrum must have one value per wavelength — a mismatch means the
+    # rows came from a different sensor calibration (sensor_date) than the
+    # wavelengths, and zip/DataFrame would silently mislabel or drop bands.
     data = []
     for row in rows:
         fixed_vals    = [row[i] for i in fixed_idxs]
         spectral_vals = list(row[spec_idx])
+        if len(spectral_vals) != len(wavelength_center):
+            raise ValueError(
+                f"{spectral_col} has {len(spectral_vals)} bands but spectral_metadata has "
+                f"{len(wavelength_center)} wavelengths — check sensor_date"
+            )
         data.append(fixed_vals + spectral_vals)
 
     return pd.DataFrame(data, columns=headers)

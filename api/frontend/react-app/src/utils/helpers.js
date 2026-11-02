@@ -143,11 +143,29 @@ export function convertToCSV(data, columnNames) {
 }
 
 /**
- * Extract pixel IDs from data
+ * Spectra are grouped per sensor calibration — "campaign|sensor|sensor_date" —
+ * because each calibration has its own wavelengths/fwhm. sensor_date may
+ * arrive as an ISO string or a Date (parquet); it is keyed as YYYY-MM-DD.
+ */
+export function sensorKey(campaignName, sensorName, sensorDate) {
+  const date = sensorDate instanceof Date
+    ? sensorDate.toISOString().slice(0, 10)
+    : String(sensorDate ?? '').slice(0, 10);
+  return `${campaignName}|${sensorName}|${date}`;
+}
+
+export function parseSensorKey(key) {
+  const [campaign, sensor, sensorDate] = key.split('|');
+  return { campaign, sensor, sensorDate: sensorDate || null };
+}
+
+/**
+ * Extract pixel IDs from data, grouped by sensorKey()
  */
 export function extractPixelIds(data, columnNames) {
   const pixelIdsIndex     = columnNames.indexOf('pixel_ids');
   const sensorNameIndex   = columnNames.indexOf('sensor_name');
+  const sensorDateIndex   = columnNames.indexOf('sensor_date');
   const campaignNameIndex = columnNames.indexOf('campaign_name');
 
   if (pixelIdsIndex === -1) return {};
@@ -157,11 +175,12 @@ export function extractPixelIds(data, columnNames) {
   data.forEach(row => {
     const pixelIdsArray  = row[pixelIdsIndex];
     const sensorName     = row[sensorNameIndex];
+    const sensorDate     = sensorDateIndex === -1 ? null : row[sensorDateIndex];
     const campaignName   = row[campaignNameIndex];
 
     if (!pixelIdsArray || !Array.isArray(pixelIdsArray)) return;
 
-    const key = `${campaignName}|${sensorName}`;
+    const key = sensorKey(campaignName, sensorName, sensorDate);
 
     if (!grouped[key]) {
       grouped[key] = new Set();

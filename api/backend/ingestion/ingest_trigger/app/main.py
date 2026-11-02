@@ -140,11 +140,19 @@ def handle_submit(event: dict, username: str) -> dict:
         body = json.loads(event.get("body") or "{}")
         batch_id = body.get("batch_id")
         name = body.get("name")
+        files = body.get("files")
     except Exception:
         return respond(400, {"message": "Invalid JSON body"})
 
     if not batch_id:
         return respond(400, {"message": "batch_id is required"})
+
+    # Partial bundles: files lists the slots the user uploaded (at least one).
+    # Older clients that don't send it uploaded every slot.
+    slots = get_file_slots()
+    files = [f for f in (files or slots) if f in slots]
+    if not files:
+        return respond(400, {"message": "at least one bundle file is required"})
 
     name = (name or "").strip()
     if not name:
@@ -153,7 +161,7 @@ def handle_submit(event: dict, username: str) -> dict:
     uploaded_at = datetime.now(timezone.utc).isoformat()
 
     try:
-        create_batch_record(batch_id, username, uploaded_at, name)
+        create_batch_record(batch_id, username, uploaded_at, name, files)
         invoke_qaqc(batch_id)
     except Exception:
         logger.exception("Failed to create batch record for batch_id=%s", batch_id)

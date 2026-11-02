@@ -285,7 +285,9 @@ export default function QaqcReport({ report, loading }) {
             </Box>
           )}
 
-          {(!result.errors?.length && !result.warnings?.length) && (
+          {result.not_provided ? (
+            <Alert severity="info" sx={{ py: 0 }}>Not provided in this bundle</Alert>
+          ) : (!result.errors?.length && !result.warnings?.length) && (
             <Alert severity="success" sx={{ py: 0 }}>All checks passed</Alert>
           )}
         </Box>

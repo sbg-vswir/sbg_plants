@@ -12,8 +12,11 @@ Checks (in order):
        a. Plot FK — (campaign_name, plot_name) must resolve.
        b. Plot-granule intersection FK — (campaign_name, plot_name, granule_id)
                                          must resolve to a known plot shape.
-       c. Band count — number of band columns must match the wavelength count
-                       declared for this campaign/sensor.
+       c. Granule sensor — the row's campaign_name / sensor_name must match
+                           its granule's.
+          Band count — number of band columns must match the wavelength count
+                       of the granule's sensor calibration (campaign, sensor,
+                       sensor_date), looked up through granule_id.
        d. Pixel uniqueness within file — (campaign, plot, granule, glt_row,
                                           glt_col) must not repeat.
        e. Pixel not in DB — same key must not already exist in production pixel.
@@ -37,7 +40,7 @@ from app.checks.types import CheckContext, CheckResult
 from app.checks.universal import (
     load_config, run_mechanical_checks,
     check_required_columns, check_no_missing_values,
-    check_castable, check_extra_columns, check_foreign_key,
+    check_castable, check_extra_columns, normalize,
     _resolve_types,
 )
 
@@ -132,7 +135,7 @@ def _check_per_row(
     - Point-in-polygon (footprint outside plot shape) is a warning, not an
       error — it includes distance bucketing so the severity can be assessed.
     """
-    all_plots, all_shape_map, all_band_counts, all_gsd_map = _build_reference_sets(context)
+    all_plots, all_shape_map, all_band_counts, all_gsd_map, all_granule_sensors = _build_reference_sets(context)
 
     errors          = []
     warnings        = []
@@ -169,9 +172,11 @@ def _check_per_row(
             })
             continue  # remaining checks depend on the intersection resolving
 
-        errors += _check_band_count(campaign, sensor, band_cols, all_band_counts, idx)
+        errors += _check_granule_sensor(
+            campaign, sensor, granule, band_cols, all_granule_sensors, all_band_counts, idx,
+        )
 
-        pk = (campaign, plot, granule, row["glt_row"], row["glt_column"])
+        pk = (campaign, plot, granule, normalize(row["glt_row"], "int"), normalize(row["glt_column"], "int"))
         if pk in pk_seen:
             errors.append({
                 "file": "spectra", "row": int(idx + 2), "column": None,
@@ -204,8 +209,8 @@ def _check_per_row(
     return errors, warnings
 
 
-def _build_reference_sets(context: CheckContext) -> tuple[set, dict, dict, dict]:
-    """Merge bundle and DB reference sets for plot FK, shape, band count, and GSD lookups."""
+def _build_reference_sets(context: CheckContext) -> tuple[set, dict, dict, dict, dict]:
+    """Merge bundle and DB reference sets for plot FK, shape, band count, GSD and granule sensor lookups."""
     all_plots = (
         set(context.output.get("plot_id_map", {}).keys())
         | context.db["plot_set"]
@@ -222,24 +227,45 @@ def _build_reference_sets(context: CheckContext) -> tuple[set, dict, dict, dict]
         **context.db["granule_gsd_map"],
         **context.output.get("granule_gsd_map", {}),
     }
-    return all_plots, all_shape_map, all_band_counts, all_gsd_map
+    all_granule_sensors = {
+        **context.db["granule_sensor_map"],
+        **context.output.get("granule_sensor_map", {}),
+    }
+    return all_plots, all_shape_map, all_band_counts, all_gsd_map, all_granule_sensors
 
 
-def _check_band_count(
+def _check_granule_sensor(
     campaign: str,
     sensor: str,
+    granule: str,
     band_cols: list[int],
+    all_granule_sensors: dict,
     all_band_counts: dict,
     idx: int,
 ) -> list[dict]:
-    """Number of band columns must match the wavelength count for this sensor."""
-    expected = all_band_counts.get((campaign, sensor))
+    """
+    The row's campaign/sensor must match its granule's, and the number of band
+    columns must match the wavelength count of the granule's calibration.
+    A granule that resolves nowhere is already reported by the intersect check.
+    """
+    sensor_key = all_granule_sensors.get(granule)
+    if sensor_key is None:
+        return []
+    if (campaign, sensor) != sensor_key[:2]:
+        return [{
+            "file": "spectra", "row": int(idx + 2), "column": "sensor_name",
+            "message": (
+                f"(campaign_name='{campaign}', sensor_name='{sensor}') does not match "
+                f"granule '{granule}' ({sensor_key[0]}, {sensor_key[1]})"
+            ),
+        }]
+    expected = all_band_counts.get(sensor_key)
     if expected is not None and len(band_cols) != expected:
         return [{
             "file": "spectra", "row": int(idx + 2), "column": None,
             "message": (
                 f"band column count ({len(band_cols)}) does not match "
-                f"wavelength count ({expected}) for ({campaign}, {sensor})"
+                f"wavelength count ({expected}) for {sensor_key}"
             ),
         }]
     return []

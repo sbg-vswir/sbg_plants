@@ -57,16 +57,18 @@ CREATE TABLE vswir_plants.doi (
 CREATE UNIQUE INDEX doi_unique ON vswir_plants.doi
     (campaign_name, lower(doi), role, sensor_name, plot_method, trait_method, trait, site_ids) NULLS NOT DISTINCT;
 
+-- one row per sensor calibration; sensor_date = date the calibration took effect
 CREATE TABLE vswir_plants.sensor_campaign (
     campaign_name vswir_plants."CAMPAIGN_name" NOT NULL,
     sensor_name vswir_plants."Sensor_name" NOT NULL,
+    sensor_date DATE NOT NULL,
     elevation_source vswir_plants."ELEVATION_source" NOT NULL,
     wavelength_center FLOAT4[] NOT NULL,
     fwhm FLOAT4[] NOT NULL,
     CONSTRAINT sensor_campaign_fkey FOREIGN KEY (campaign_name)
         REFERENCES vswir_plants.campaign(campaign_name)
         ON DELETE CASCADE,
-    CONSTRAINT sensor_campaign_pk PRIMARY KEY (campaign_name, sensor_name)
+    CONSTRAINT sensor_campaign_pk PRIMARY KEY (campaign_name, sensor_name, sensor_date)
 );
 
 CREATE TABLE vswir_plants.plot (
@@ -77,7 +79,8 @@ CREATE TABLE vswir_plants.plot (
     plot_method vswir_plants."PLOT_method",
     CONSTRAINT plot_campaign_name_fkey FOREIGN KEY (campaign_name)
         REFERENCES vswir_plants.campaign(campaign_name) 
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT plot_unique UNIQUE (campaign_name, plot_name)
 );
 
 -- a column to specify map space and raw space?
@@ -87,6 +90,7 @@ CREATE TABLE vswir_plants.granule (
     granule_id VARCHAR PRIMARY KEY,
     campaign_name vswir_plants."CAMPAIGN_name" NOT NULL,
     sensor_name vswir_plants."Sensor_name" NOT NULL,
+    sensor_date DATE NOT NULL,
     acquisition_start_time time NOT NULL,
     acquisition_date DATE NOT NULL,
     granule_rad_url VARCHAR,
@@ -96,8 +100,8 @@ CREATE TABLE vswir_plants.granule (
     cloud_type vswir_plants. "CLOUD_type" NOT NULL,
     gsd FLOAT4 NOT NULL,
     raster_epsg INTEGER NOT NULL,
-    CONSTRAINT granule_fkey FOREIGN KEY (campaign_name, sensor_name)
-        REFERENCES vswir_plants.sensor_campaign(campaign_name, sensor_name)
+    CONSTRAINT granule_fkey FOREIGN KEY (campaign_name, sensor_name, sensor_date)
+        REFERENCES vswir_plants.sensor_campaign(campaign_name, sensor_name, sensor_date)
         ON DELETE CASCADE
 );
 

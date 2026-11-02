@@ -44,18 +44,20 @@ def query_child_jobs(parent_job_id: str) -> list[dict]:
 
 def get_parent_pixel_ids_by_sensor(parent_job_id: str) -> dict:
     """
-    Collect all pixel IDs for a parent job, grouped by 'campaign|sensor' key.
-    Returns: { "campaign|sensor": [pixel_id, ...], ... }
+    Collect all pixel IDs for a parent job, grouped by sensor calibration.
+    Returns: { "campaign|sensor|sensor_date": [pixel_id, ...], ... }
+    Child jobs submitted before sensor_date existed group as 'campaign|sensor'.
     """
     items = query_child_jobs(parent_job_id)
     grouped = {}
     for item in items:
         campaign = item.get("campaign_name", {}).get("S", "")
         sensor   = item.get("sensor_name",   {}).get("S", "")
+        date     = item.get("sensor_date",   {}).get("S", "")
         raw      = item.get("pixel_ids",     {}).get("S")
         if not campaign or not sensor or not raw:
             continue
-        key = f"{campaign}|{sensor}"
+        key = f"{campaign}|{sensor}|{date}" if date else f"{campaign}|{sensor}"
         try:
             ids = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
