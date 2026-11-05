@@ -74,6 +74,11 @@ variable "isofit_ecr_image" {
   type        = string
 }
 
+variable "isofit_slim_ecr_image" {
+  description = "ECR image URI for the slim isofit batch worker (Dockerfile.slim)"
+  type        = string
+}
+
 variable "pixel_selection_ecr_image" {
   description = "ECR image URI for the pixel selection Lambda"
   type        = string

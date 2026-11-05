@@ -108,6 +108,7 @@ module "isofit_pipeline" {
   dynamodb_table_arn        = module.api.export_jobs_table_arn
   dynamodb_table_name       = module.api.export_jobs_table_name
   ecr_image                 = var.isofit_ecr_image
+  ecr_image_slim            = var.isofit_slim_ecr_image
   pixel_selection_ecr_image = var.pixel_selection_ecr_image
   pixel_output_promotion_ecr_image = var.pixel_output_promotion_ecr_image
   cognito_authorizer_id     = module.api.cognito_authorizer_id

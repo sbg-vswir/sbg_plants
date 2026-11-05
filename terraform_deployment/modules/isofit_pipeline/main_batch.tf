@@ -334,7 +334,9 @@ resource "aws_iam_role_policy" "batch_job_policy" {
         ]
         Resource = [
           var.config_bucket_arn,
-          "${var.config_bucket_arn}/isofit-app/*"
+          "${var.config_bucket_arn}/isofit-app/*",
+          # per-calibration ISOFIT input files: isofit-inputs/<campaign>/<sensor>/<sensor_date>/
+          "${var.config_bucket_arn}/isofit-inputs/*"
         ]
       }
     ]

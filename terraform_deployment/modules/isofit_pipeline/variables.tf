@@ -90,3 +90,20 @@ variable "pixel_output_promotion_ecr_image" {
   description = "ECR image URI for the pixel output promotion Lambda container"
   type        = string
 }
+
+variable "ecr_image_slim" {
+  description = "ECR image URI for the slim isofit batch worker (Dockerfile.slim — sRTMnet mounted from S3)"
+  type        = string
+}
+
+variable "isofit_data_prefix" {
+  description = "Prefix in the config bucket holding large ISOFIT data, mounted at /mnt/isofit-data on slim workers"
+  type        = string
+  default     = "isofit-data/"
+}
+
+variable "srtmnet_file" {
+  description = "sRTMnet emulator .h5, relative to isofit_data_prefix; its _aux.npz sits next to it"
+  type        = string
+  default     = "srtmnet/sRTMnet_v120.h5"
+}
