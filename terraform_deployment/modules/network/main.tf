@@ -174,8 +174,18 @@ resource "aws_instance" "bastion_instance" {
   tags = var.tags
 
   lifecycle {
+    # ami is not ignored on purpose: data.aws_ami.ubuntu is most_recent, so a
+    # new Ubuntu release replaces the bastion with a freshly patched one.
+    # aws_ec2_instance_state.bastion then stops the new instance.
     ignore_changes = [tags, associate_public_ip_address]
   }
+}
+
+# Keep the bastion stopped unless bastion_running = true. Starting it by hand
+# (aws ec2 start-instances) works, but the next apply will stop it again.
+resource "aws_ec2_instance_state" "bastion" {
+  instance_id = aws_instance.bastion_instance.id
+  state       = var.bastion_running ? "running" : "stopped"
 }
 
 resource "aws_vpc_endpoint" "s3" {
@@ -188,8 +198,9 @@ resource "aws_vpc_endpoint" "s3" {
 }
 
 module "fck-nat" {
-  source = "git::https://github.com/RaJiska/terraform-aws-fck-nat.git"
-  count  = 2
+  source  = "RaJiska/fck-nat/aws"
+  version = "1.6.1"
+  count   = 2
 
   name          = "natgateway-${count.index}"
   vpc_id        = aws_vpc.main.id
@@ -198,6 +209,17 @@ module "fck-nat" {
   instance_type = "t4g.nano"
 
   update_route_tables = true
+
+  # Rolling instance refresh when the launch template changes (new AMI or user data).
+  # The module uses min_healthy_percentage = 0, so each AZ loses egress for ~1-3 min.
+  auto_rollout = true
+
+  # fck-nat AMIs lag AL2023 security updates; apply all updates at boot.
+  # Kernel updates take effect on the next instance replacement.
+  cloud_init_parts = [{
+    content_type = "text/x-shellscript"
+    content      = "#!/bin/bash\ndnf upgrade -y --releasever=latest"
+  }]
 
   route_tables_ids = {
     private = [

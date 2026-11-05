@@ -27,3 +27,9 @@ variable "bastion_public_key" {
   description = "Public key for bastion SSH key pair"
   type        = string
 }
+
+variable "bastion_running" {
+  description = "Whether the bastion instance should be running (stopped by default)"
+  type        = bool
+  default     = false
+}
