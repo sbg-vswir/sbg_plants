@@ -84,6 +84,12 @@ variable "bastion_public_key" {
   type        = string
 }
 
+variable "bastion_ssh_cidr_blocks" {
+  description = "CIDRs allowed to SSH to the bastion. Empty disables SSH ingress (SSM Session Manager still works)."
+  type        = list(string)
+  default     = []
+}
+
 variable "ingest_trigger_image_uri" {
   description = "ECR image URI for the ingest trigger Lambda"
   type        = string

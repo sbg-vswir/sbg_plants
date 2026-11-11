@@ -46,7 +46,7 @@ resource "aws_db_instance" "default" {
   final_snapshot_identifier = "${var.name}-final-snapshot"
 
   multi_az          = false
-  storage_encrypted = false
+  storage_encrypted = true
   tags              = var.tags
 
   # Lifecycle protection
