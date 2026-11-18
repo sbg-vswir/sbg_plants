@@ -135,12 +135,14 @@ resource "aws_security_group" "bastion_sg" {
   description = "Security group for the bastion host"
   vpc_id      = aws_vpc.main.id
 
-  // Allow SSH access from your IP address
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+  dynamic "ingress" {
+    for_each = length(var.bastion_ssh_cidr_blocks) > 0 ? [1] : []
+    content {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = var.bastion_ssh_cidr_blocks
+    }
   }
 
   // Allow all outbound traffic

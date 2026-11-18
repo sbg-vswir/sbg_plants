@@ -23,6 +23,11 @@ variable "vpc_id" {
   type        = string
 }
 
+variable "vpc_cidr_block" {
+  description = "VPC CIDR allowed to reach the interface VPC endpoints"
+  type        = string
+}
+
 variable "db_user" {
   type = string
 }

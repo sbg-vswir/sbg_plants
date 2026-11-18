@@ -33,3 +33,8 @@ variable "bastion_running" {
   type        = bool
   default     = false
 }
+
+variable "bastion_ssh_cidr_blocks" {
+  description = "CIDRs allowed to SSH to the bastion. Empty disables SSH ingress (SSM Session Manager still works)."
+  type        = list(string)
+}

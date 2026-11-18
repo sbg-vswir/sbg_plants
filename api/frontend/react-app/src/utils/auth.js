@@ -3,13 +3,39 @@ export const COGNITO_CLIENT_ID    = import.meta.env.VITE_COGNITO_CLIENT_ID;
 export const COGNITO_REDIRECT_URI = import.meta.env.VITE_COGNITO_REDIRECT_URI;
 const COGNITO_LOGOUT_URI  = import.meta.env.VITE_COGNITO_LOGOUT_URI;
 
+// PKCE (RFC 7636): binds the authorization code to this browser session so an
+// intercepted code cannot be redeemed elsewhere.
+const PKCE_VERIFIER_KEY = 'pkce_code_verifier';
+
+function base64UrlEncode(bytes) {
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function generateCodeVerifier() {
+  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+async function generateCodeChallenge(verifier) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
 // Redirect user to Cognito hosted UI login
-export function redirectToLogin() {
+export async function redirectToLogin() {
+  const verifier  = generateCodeVerifier();
+  const challenge = await generateCodeChallenge(verifier);
+  sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+
   const url = new URL(`${COGNITO_DOMAIN}/login`);
   url.searchParams.set('client_id', COGNITO_CLIENT_ID);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('scope', 'openid email profile');
   url.searchParams.set('redirect_uri', COGNITO_REDIRECT_URI);
+  url.searchParams.set('code_challenge', challenge);
+  url.searchParams.set('code_challenge_method', 'S256');
   window.location.href = url.toString();
 }
 
@@ -22,14 +48,19 @@ export function redirectToLogout() {
 }
 
 export async function exchangeCodeForTokens(code) {
+  const verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
+  sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+  if (!verifier) throw new Error('Missing PKCE code verifier');
+
   const response = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      grant_type:   'authorization_code',
-      client_id:    COGNITO_CLIENT_ID,
-      redirect_uri: COGNITO_REDIRECT_URI,
+      grant_type:    'authorization_code',
+      client_id:     COGNITO_CLIENT_ID,
+      redirect_uri:  COGNITO_REDIRECT_URI,
       code,
+      code_verifier: verifier,
     }),
   });
 

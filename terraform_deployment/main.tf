@@ -7,12 +7,13 @@ module "network" {
 
   source = "./modules/network"
 
-  name                   = var.name
-  region                 = var.region
-  aws_availability_zones = var.aws_availability_zones
-  tags                   = var.tags
-  vpc_cidr_block         = var.vpc_cidr_block
-  bastion_public_key     = var.bastion_public_key
+  name                    = var.name
+  region                  = var.region
+  aws_availability_zones  = var.aws_availability_zones
+  tags                    = var.tags
+  vpc_cidr_block          = var.vpc_cidr_block
+  bastion_public_key      = var.bastion_public_key
+  bastion_ssh_cidr_blocks = var.bastion_ssh_cidr_blocks
 
 }
 
@@ -36,6 +37,7 @@ module "api" {
   source = "./modules/api"
 
   vpc_id             = module.network.vpc_id
+  vpc_cidr_block     = var.vpc_cidr_block
   public_subnet_ids  = local.public_subnet_ids
   private_subnet_ids = local.private_subnet_ids
   name               = var.name

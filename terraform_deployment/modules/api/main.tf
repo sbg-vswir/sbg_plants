@@ -108,12 +108,13 @@ resource "aws_security_group" "lambda_sg" {
   description = "SG for Lambda in VPC"
   vpc_id      = var.vpc_id
 
-  # No inbound rules needed — API Gateway triggers Lambda
+  # Lambdas need no inbound access, but this SG is also attached to the interface
+  # VPC endpoints (Secrets Manager, ECR, SQS), which must accept HTTPS from the VPC.
   ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr_block]
   }
 
 
